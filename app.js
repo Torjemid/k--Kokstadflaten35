@@ -1,8 +1,13 @@
 const DATA_URL = "https://hfhjbbzbuzebilfuydtm.supabase.co/functions/v1/clever-api";
+const ACTIVE_TAB_STORAGE_KEY = "kokstadDashboardActiveTab";
+const RUSH_REFRESH_START_MINUTES = 14 * 60 + 30;
+const RUSH_REFRESH_END_MINUTES = 16 * 60 + 30;
+const FAST_REFRESH_INTERVAL_MS = 2 * 60 * 1000;
+const DEFAULT_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 const state = {
   payload: null,
-  activeTab: "summary",
+  activeTab: getStoredActiveTab(),
 };
 
 const elements = {
@@ -113,12 +118,40 @@ function setClock() {
   }).format(new Date());
 }
 
-function severityInfo(delaySec, queueLengthMeters = 0) {
-  if (delaySec >= 300 || queueLengthMeters >= 300) {
-    return { label: "Tydelig ko", color: "#ff6b5f" };
+function getStoredActiveTab() {
+  try {
+    return window.localStorage.getItem(ACTIVE_TAB_STORAGE_KEY) ?? "summary";
+  } catch {
+    return "summary";
   }
-  if (delaySec >= 120 || queueLengthMeters >= 120) {
-    return { label: "Moderat ko", color: "#ffb84d" };
+}
+
+function setStoredActiveTab(tabId) {
+  try {
+    window.localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tabId);
+  } catch {
+    // Ignore storage failures on locked-down kiosk devices.
+  }
+}
+
+function getRefreshIntervalMs(now = new Date()) {
+  const totalMinutes = now.getHours() * 60 + now.getMinutes();
+  const isRushWindow =
+    totalMinutes >= RUSH_REFRESH_START_MINUTES &&
+    totalMinutes <= RUSH_REFRESH_END_MINUTES;
+
+  return isRushWindow ? FAST_REFRESH_INTERVAL_MS : DEFAULT_REFRESH_INTERVAL_MS;
+}
+
+function severityInfo(delaySec, thresholds = { lightDelaySec: 120, queueDelaySec: 300, majorDelaySec: 900 }) {
+  if (delaySec >= thresholds.majorDelaySec) {
+    return { label: "Betydelig kø", color: "#ff6b5f" };
+  }
+  if (delaySec >= thresholds.queueDelaySec) {
+    return { label: "Kø", color: "#ffb84d" };
+  }
+  if (delaySec >= thresholds.lightDelaySec) {
+    return { label: "Litt kø", color: "#ffd36e" };
   }
   return { label: "Flyt i trafikken", color: "#5fd497" };
 }
@@ -140,13 +173,14 @@ function renderTabs(payload) {
     button.textContent = tab.label;
     button.addEventListener("click", () => {
       state.activeTab = tab.id;
+      setStoredActiveTab(tab.id);
       applyView();
     });
     elements.routeTabs.appendChild(button);
   });
 }
 
-function renderSummarySlot(label, snapshot) {
+function renderSummarySlot(label, snapshot, thresholds) {
   if (!snapshot) {
     return `
       <div class="summary-slot">
@@ -157,7 +191,7 @@ function renderSummarySlot(label, snapshot) {
     `;
   }
 
-  const info = severityInfo(snapshot.delaySec, snapshot.queueLengthMeters);
+  const info = severityInfo(snapshot.delaySec, thresholds);
 
   return `
     <div class="summary-slot">
@@ -181,9 +215,9 @@ function renderSummary(payload) {
           <span class="summary-updated">${item.updatedAt ? displayTime(item.updatedAt) : "--"}</span>
         </div>
         <div class="summary-slots">
-          ${renderSummarySlot("Na", item.now)}
-          ${renderSummarySlot("+30 min", item.plus30)}
-          ${renderSummarySlot("+1 time", item.plus60)}
+          ${renderSummarySlot("Nå", item.now, item.thresholds)}
+          ${renderSummarySlot("+30 min", item.plus30, item.thresholds)}
+          ${renderSummarySlot("+1 time", item.plus60, item.thresholds)}
         </div>
       </article>
     `)
@@ -191,7 +225,7 @@ function renderSummary(payload) {
 }
 
 function renderHero(route) {
-  const info = severityInfo(route.current.delaySec, route.current.queueLengthMeters);
+  const info = severityInfo(route.current.delaySec, route.thresholds);
   elements.severityPill.textContent = info.label;
   elements.severityPill.style.color = info.color;
   elements.severityPill.style.background = `${info.color}1e`;
@@ -199,9 +233,9 @@ function renderHero(route) {
 
   elements.heroDelay.textContent = formatMinutes(route.current.delaySec / 60);
   elements.heroSummary.textContent =
-    `Strekningen bruker na ${formatMinutesFromSeconds(route.current.durationSec)} mot ` +
+    `Strekningen bruker nå ${formatMinutesFromSeconds(route.current.durationSec)} mot ` +
     `${formatMinutesFromSeconds(route.current.staticDurationSec)} under normal flyt. ` +
-    `Estimert kobelastning ligger pa ${formatMeters(route.current.queueLengthMeters)} av ruten.`;
+    `Estimert købelastning ligger på ${formatMeters(route.current.queueLengthMeters)} av ruten.`;
   elements.queueLengthValue.textContent = formatMeters(route.current.queueLengthMeters);
   elements.liveDurationValue.textContent = formatMinutesFromSeconds(route.current.durationSec);
   elements.freeFlowValue.textContent = formatMinutesFromSeconds(route.current.staticDurationSec);
@@ -225,13 +259,13 @@ function renderRoute(route) {
   elements.routeLegend.innerHTML = `
     <span class="legend-chip normal">Normal</span>
     <span class="legend-chip slow">Sakte</span>
-    <span class="legend-chip jam">Ko</span>
+    <span class="legend-chip jam">Kø</span>
   `;
 }
 
 function renderTodayStats(route) {
-  elements.queueStartValue.textContent = route.today.queueStart ? displayTime(route.today.queueStart) : "Ingen tydelig ko";
-  elements.queueEndValue.textContent = route.today.queueEnd ? displayTime(route.today.queueEnd) : "Pagar";
+  elements.queueStartValue.textContent = route.today.queueStart ? displayTime(route.today.queueStart) : "Ingen tydelig kø";
+  elements.queueEndValue.textContent = route.today.queueEnd ? displayTime(route.today.queueEnd) : "Pågår";
   elements.queueDurationValue.textContent = formatMinutes(route.today.queueDurationMinutes);
   elements.peakDelayValue.textContent = formatMinutes(route.today.peakDelayMinutes);
 }
@@ -282,7 +316,7 @@ function renderQueueChart(route) {
     .join("");
 
   const emptyState = actualMaxQueue === 0
-    ? `<text x="${padding.left}" y="${padding.top - 6}" fill="rgba(150,168,189,0.72)" font-size="11">Flat trend siste maalinger</text>`
+    ? `<text x="${padding.left}" y="${padding.top - 6}" fill="rgba(150,168,189,0.72)" font-size="11">Flat trend siste målinger</text>`
     : "";
 
   svg.innerHTML = `
@@ -313,7 +347,7 @@ function heatColor(value) {
 }
 
 function renderHeatmap(route) {
-  const days = ["Man", "Tir", "Ons", "Tor", "Fre", "Lor", "Son"];
+  const days = ["Man", "Tir", "Ons", "Tor", "Fre", "Lør", "Søn"];
   const container = elements.weekdayHeatmap;
   container.innerHTML = "";
 
@@ -365,7 +399,7 @@ function applyView() {
   if (state.activeTab === "summary") {
     document.body.classList.add("summary-mode");
     document.body.classList.remove("route-mode");
-    elements.routeSubtitle.textContent = "Oversikt over fire ruter fra Kokstad, med estimering na og frem i tid.";
+    elements.routeSubtitle.textContent = "Oversikt over fire ruter fra Kokstad, med estimering nå og frem i tid.";
     elements.updatedValue.textContent = formatTime(state.payload.updatedAt);
     renderSummary(state.payload);
     return;
@@ -393,24 +427,36 @@ async function loadDashboard() {
   state.payload = data;
   if (state.activeTab !== "summary" && !data.routes.some((route) => route.id === state.activeTab)) {
     state.activeTab = "summary";
+    setStoredActiveTab("summary");
   }
 
   applyView();
 }
 
+function scheduleDashboardPolling() {
+  const delay = getRefreshIntervalMs();
+
+  window.setTimeout(() => {
+    loadDashboard()
+      .catch((error) => {
+        elements.routeSubtitle.textContent = `Kunne ikke oppdatere dashboard-data: ${error.message}`;
+      })
+      .finally(scheduleDashboardPolling);
+  }, delay);
+}
+
+function schedulePageRefresh() {
+  const delay = getRefreshIntervalMs();
+
+  window.setTimeout(() => {
+    window.location.reload();
+  }, delay);
+}
+
 setClock();
 setInterval(setClock, 1000);
-setInterval(() => {
-  loadDashboard().catch((error) => {
-    elements.routeSubtitle.textContent = `Kunne ikke oppdatere dashboard-data: ${error.message}`;
-  });
-}, 5 * 60 * 1000);
-
-// Force a full document refresh as a safety net so long-running wallboard sessions
-// pick up new frontend deployments and don't rely only on in-page polling.
-setInterval(() => {
-  window.location.reload();
-}, 5 * 60 * 1000);
+scheduleDashboardPolling();
+schedulePageRefresh();
 
 loadDashboard().catch((error) => {
   elements.routeSubtitle.textContent = `Kunne ikke laste dashboard-data: ${error.message}`;

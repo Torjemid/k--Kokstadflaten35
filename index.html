@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Kokstad Queue Dashboard</title>
+  <title>Kø-dashboard for Kokstadflaten</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -14,12 +14,12 @@
     <header class="topbar">
       <div>
         <p class="eyebrow">Kokstad Trafikk</p>
-        <h1>Kodashboard for Kokstadflaten</h1>
-        <p id="routeSubtitle" class="subtitle">Oversikt over fire ruter fra Kokstad, med estimering na og frem i tid.</p>
+        <h1>Kø-dashboard for Kokstadflaten</h1>
+        <p id="routeSubtitle" class="subtitle">Oversikt over fire ruter fra Kokstad, med estimering nå og frem i tid.</p>
       </div>
       <div class="topbar-meta">
         <div class="clock-card">
-          <span class="label">Na</span>
+          <span class="label">Nå</span>
           <span id="clockValue" class="value">--:--</span>
         </div>
         <div class="clock-card">
@@ -35,7 +35,7 @@
       <section id="summaryPanel" class="panel panel-summary summary-only">
         <div class="panel-head">
           <h3>Summary</h3>
-          <span class="muted">Ko na, om 30 min og om 1 time</span>
+          <span class="muted">Kø nå, om 30 min og om 1 time</span>
         </div>
         <div id="summaryGrid" class="summary-grid"></div>
       </section>
@@ -47,11 +47,11 @@
           <p id="heroSummary" class="hero-summary">Laster sanntidsstatus...</p>
           <div class="hero-kpis">
             <div class="metric-card accent-amber">
-              <span class="metric-label">Estimert kolengde</span>
+              <span class="metric-label">Estimert kølengde</span>
               <strong id="queueLengthValue">-- m</strong>
             </div>
             <div class="metric-card accent-cyan">
-              <span class="metric-label">Reisetid na</span>
+              <span class="metric-label">Reisetid nå</span>
               <strong id="liveDurationValue">-- min</strong>
             </div>
             <div class="metric-card accent-slate">
@@ -77,19 +77,19 @@
       <section class="panel panel-today route-only">
         <div class="panel-head">
           <h3>I dag</h3>
-          <span class="muted">Start og slutt for ko</span>
+          <span class="muted">Start og slutt for kø</span>
         </div>
         <div class="stat-grid">
           <article class="stat-tile">
-            <span class="stat-label">Ko startet</span>
+            <span class="stat-label">Kø startet</span>
             <strong id="queueStartValue">--</strong>
           </article>
           <article class="stat-tile">
-            <span class="stat-label">Ko avtok</span>
+            <span class="stat-label">Kø avtok</span>
             <strong id="queueEndValue">--</strong>
           </article>
           <article class="stat-tile">
-            <span class="stat-label">Samlet kotid</span>
+            <span class="stat-label">Samlet køtid</span>
             <strong id="queueDurationValue">--</strong>
           </article>
           <article class="stat-tile">
@@ -101,8 +101,8 @@
 
       <section class="panel panel-chart route-only">
         <div class="panel-head">
-          <h3>Ko siste timer</h3>
-          <span class="muted">Estimert kobelastning over tid</span>
+          <h3>Kø siste timer</h3>
+          <span class="muted">Estimert købelastning over tid</span>
         </div>
         <svg id="delayChart" class="chart" viewBox="0 0 640 220" preserveAspectRatio="none"></svg>
       </section>
@@ -110,7 +110,7 @@
       <section class="panel panel-heatmap route-only">
         <div class="panel-head">
           <h3>Ukedagsprofil</h3>
-          <span class="muted">Nar koen pleier a bygge seg opp</span>
+          <span class="muted">Når køen pleier å bygge seg opp</span>
         </div>
         <div id="weekdayHeatmap" class="heatmap"></div>
       </section>
@@ -118,12 +118,12 @@
       <section class="panel panel-wide route-only">
         <div class="panel-head">
           <h3>Historisk bilde</h3>
-          <span class="muted">Garsdagens topp og forventet monster fremover</span>
+          <span class="muted">Gårsdagens topp og forventet mønster fremover</span>
         </div>
         <div class="forecast-grid">
           <article class="forecast-card">
             <div class="forecast-head">
-              <h4>Garsdagens kotopp</h4>
+              <h4>Gårsdagens køtopp</h4>
               <span class="muted">Sist avsluttede referanse</span>
             </div>
             <div class="forecast-stats">
@@ -140,7 +140,7 @@
                 <strong id="yesterdayDurationValue">--</strong>
               </div>
               <div class="forecast-stat">
-                <span class="stat-label">Kotopp</span>
+                <span class="stat-label">Køtopp</span>
                 <strong id="yesterdayPeakValue">--</strong>
               </div>
             </div>
@@ -149,7 +149,7 @@
           <article class="forecast-card">
             <div class="forecast-head">
               <h4>Forventet i dag</h4>
-              <span class="muted">Historisk monster for samme ukedag</span>
+              <span class="muted">Historisk mønster for samme ukedag</span>
             </div>
             <div class="forecast-stats">
               <div class="forecast-stat">
@@ -165,7 +165,7 @@
                 <strong id="forecastTodayDurationValue">--</strong>
               </div>
               <div class="forecast-stat">
-                <span class="stat-label">Kotopp</span>
+                <span class="stat-label">Køtopp</span>
                 <strong id="forecastTodayPeakValue">--</strong>
               </div>
             </div>
@@ -174,7 +174,7 @@
           <article class="forecast-card">
             <div class="forecast-head">
               <h4>Forventet i morgen</h4>
-              <span class="muted">Neste ukedag basert pa historikk</span>
+              <span class="muted">Neste ukedag basert på historikk</span>
             </div>
             <div class="forecast-stats">
               <div class="forecast-stat">
@@ -190,7 +190,7 @@
                 <strong id="forecastTomorrowDurationValue">--</strong>
               </div>
               <div class="forecast-stat">
-                <span class="stat-label">Kotopp</span>
+                <span class="stat-label">Køtopp</span>
                 <strong id="forecastTomorrowPeakValue">--</strong>
               </div>
             </div>
