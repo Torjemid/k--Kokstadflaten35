@@ -94,7 +94,7 @@
           <h3>Kø siste timer</h3>
           <span class="muted">Estimert købelastning over tid</span>
         </div>
-        <svg id="delayChart" class="chart" viewBox="0 0 640 240" preserveAspectRatio="none"></svg>
+        <svg id="delayChart" class="chart" viewBox="0 0 640 220" preserveAspectRatio="none"></svg>
       </section>
 
       <section class="panel panel-heatmap">
@@ -107,31 +107,88 @@
 
       <section class="panel panel-wide">
         <div class="panel-head">
-          <h3>Siste køepisoder</h3>
-          <span class="muted">Basert på lagrede snapshots</span>
+          <h3>Historisk bilde</h3>
+          <span class="muted">Gårsdagens topp og forventet mønster fremover</span>
         </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Dato</th>
-                <th>Start</th>
-                <th>Slutt</th>
-                <th>Varighet</th>
-                <th>Maks forsinkelse</th>
-                <th>Maks kølengde</th>
-              </tr>
-            </thead>
-            <tbody id="episodesTableBody"></tbody>
-          </table>
+        <div class="forecast-grid">
+          <article class="forecast-card">
+            <div class="forecast-head">
+              <h4>Gårsdagens køtopp</h4>
+              <span class="muted">Sist avsluttede referanse</span>
+            </div>
+            <div class="forecast-stats">
+              <div class="forecast-stat">
+                <span class="stat-label">Start</span>
+                <strong id="yesterdayStartValue">--</strong>
+              </div>
+              <div class="forecast-stat">
+                <span class="stat-label">Slutt</span>
+                <strong id="yesterdayEndValue">--</strong>
+              </div>
+              <div class="forecast-stat">
+                <span class="stat-label">Varighet</span>
+                <strong id="yesterdayDurationValue">--</strong>
+              </div>
+              <div class="forecast-stat">
+                <span class="stat-label">Køtopp</span>
+                <strong id="yesterdayPeakValue">--</strong>
+              </div>
+            </div>
+          </article>
+
+          <article class="forecast-card">
+            <div class="forecast-head">
+              <h4>Forventet i dag</h4>
+              <span class="muted">Historisk mønster for samme ukedag</span>
+            </div>
+            <div class="forecast-stats">
+              <div class="forecast-stat">
+                <span class="stat-label">Start</span>
+                <strong id="forecastTodayStartValue">--</strong>
+              </div>
+              <div class="forecast-stat">
+                <span class="stat-label">Slutt</span>
+                <strong id="forecastTodayEndValue">--</strong>
+              </div>
+              <div class="forecast-stat">
+                <span class="stat-label">Varighet</span>
+                <strong id="forecastTodayDurationValue">--</strong>
+              </div>
+              <div class="forecast-stat">
+                <span class="stat-label">Køtopp</span>
+                <strong id="forecastTodayPeakValue">--</strong>
+              </div>
+            </div>
+          </article>
+
+          <article class="forecast-card">
+            <div class="forecast-head">
+              <h4>Forventet i morgen</h4>
+              <span class="muted">Neste ukedag basert på historikk</span>
+            </div>
+            <div class="forecast-stats">
+              <div class="forecast-stat">
+                <span class="stat-label">Start</span>
+                <strong id="forecastTomorrowStartValue">--</strong>
+              </div>
+              <div class="forecast-stat">
+                <span class="stat-label">Slutt</span>
+                <strong id="forecastTomorrowEndValue">--</strong>
+              </div>
+              <div class="forecast-stat">
+                <span class="stat-label">Varighet</span>
+                <strong id="forecastTomorrowDurationValue">--</strong>
+              </div>
+              <div class="forecast-stat">
+                <span class="stat-label">Køtopp</span>
+                <strong id="forecastTomorrowPeakValue">--</strong>
+              </div>
+            </div>
+          </article>
         </div>
       </section>
     </main>
   </div>
-
-  <script src="./app.js" type="module"></script>
-</body>
-</html>
 
   <script src="./app.js" type="module"></script>
 </body>
