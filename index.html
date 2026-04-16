@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kokstad Queue Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Kokstad Trafikk</p>
+        <h1>Kødashboard for Kokstadflaten</h1>
+        <p class="subtitle">Fra Odfjell Drilling til krysset Kokstadflaten x Kokstadvegen</p>
+      </div>
+      <div class="topbar-meta">
+        <div class="clock-card">
+          <span class="label">Nå</span>
+          <span id="clockValue" class="value">--:--</span>
+        </div>
+        <div class="clock-card">
+          <span class="label">Oppdatert</span>
+          <span id="updatedValue" class="value">Laster</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="dashboard-grid">
+      <section class="panel panel-hero">
+        <div class="hero-copy">
+          <span id="severityPill" class="severity-pill">Analyserer</span>
+          <h2 id="heroDelay">-- min</h2>
+          <p id="heroSummary" class="hero-summary">Laster sanntidsstatus...</p>
+          <div class="hero-kpis">
+            <div class="metric-card accent-amber">
+              <span class="metric-label">Estimert kølengde</span>
+              <strong id="queueLengthValue">-- m</strong>
+            </div>
+            <div class="metric-card accent-cyan">
+              <span class="metric-label">Reisetid nå</span>
+              <strong id="liveDurationValue">-- min</strong>
+            </div>
+            <div class="metric-card accent-slate">
+              <span class="metric-label">Normal reisetid</span>
+              <strong id="freeFlowValue">-- min</strong>
+            </div>
+          </div>
+        </div>
+        <div class="route-visual">
+          <div class="route-header">
+            <span>Rute med trafikksegmenter</span>
+            <span id="distanceValue">-- km</span>
+          </div>
+          <div id="routeStrip" class="route-strip"></div>
+          <div class="route-labels">
+            <span>Odfjell Drilling</span>
+            <span>Kokstadflaten x Kokstadvegen</span>
+          </div>
+          <div id="routeLegend" class="route-legend"></div>
+        </div>
+      </section>
+
+      <section class="panel panel-today">
+        <div class="panel-head">
+          <h3>I dag</h3>
+          <span class="muted">Start og slutt for kø</span>
+        </div>
+        <div class="stat-grid">
+          <article class="stat-tile">
+            <span class="stat-label">Kø startet</span>
+            <strong id="queueStartValue">--</strong>
+          </article>
+          <article class="stat-tile">
+            <span class="stat-label">Kø avtok</span>
+            <strong id="queueEndValue">--</strong>
+          </article>
+          <article class="stat-tile">
+            <span class="stat-label">Samlet køtid</span>
+            <strong id="queueDurationValue">--</strong>
+          </article>
+          <article class="stat-tile">
+            <span class="stat-label">Topptid</span>
+            <strong id="peakDelayValue">--</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel panel-chart">
+        <div class="panel-head">
+          <h3>Kø siste timer</h3>
+          <span class="muted">Estimert købelastning over tid</span>
+        </div>
+        <svg id="delayChart" class="chart" viewBox="0 0 640 220" preserveAspectRatio="none"></svg>
+      </section>
+
+      <section class="panel panel-heatmap">
+        <div class="panel-head">
+          <h3>Ukedagsprofil</h3>
+          <span class="muted">Når køen pleier å bygge seg opp</span>
+        </div>
+        <div id="weekdayHeatmap" class="heatmap"></div>
+      </section>
+
+      <section class="panel panel-wide">
+        <div class="panel-head">
+          <h3>Historisk bilde</h3>
+          <span class="muted">Gårsdagens topp og forventet mønster fremover</span>
+        </div>
+        <div class="forecast-grid">
+          <article class="forecast-card">
+            <div class="forecast-head">
+              <h4>Gårsdagens køtopp</h4>
+              <span class="muted">Sist avsluttede referanse</span>
+            </div>
+            <div class="forecast-stats">
+              <div class="forecast-stat">
+                <span class="stat-label">Start</span>
+                <strong id="yesterdayStartValue">--</strong>
+              </div>
+              <div class="forecast-stat">
+                <span class="stat-label">Slutt</span>
+                <strong id="yesterdayEndValue">--</strong>
+              </div>
+              <div class="forecast-stat">
+                <span class="stat-label">Varighet</span>
+                <strong id="yesterdayDurationValue">--</strong>
+              </div>
+              <div class="forecast-stat">
+                <span class="stat-label">Køtopp</span>
+                <strong id="yesterdayPeakValue">--</strong>
+              </div>
+            </div>
+          </article>
+
+          <article class="forecast-card">
+            <div class="forecast-head">
+              <h4>Forventet i dag</h4>
+              <span class="muted">Historisk mønster for samme ukedag</span>
+            </div>
+            <div class="forecast-stats">
+              <div class="forecast-stat">
+                <span class="stat-label">Start</span>
+                <strong id="forecastTodayStartValue">--</strong>
+              </div>
+              <div class="forecast-stat">
+                <span class="stat-label">Slutt</span>
+                <strong id="forecastTodayEndValue">--</strong>
+              </div>
+              <div class="forecast-stat">
+                <span class="stat-label">Varighet</span>
+                <strong id="forecastTodayDurationValue">--</strong>
+              </div>
+              <div class="forecast-stat">
+                <span class="stat-label">Køtopp</span>
+                <strong id="forecastTodayPeakValue">--</strong>
+              </div>
+            </div>
+          </article>
+
+          <article class="forecast-card">
+            <div class="forecast-head">
+              <h4>Forventet i morgen</h4>
+              <span class="muted">Neste ukedag basert på historikk</span>
+            </div>
+            <div class="forecast-stats">
+              <div class="forecast-stat">
+                <span class="stat-label">Start</span>
+                <strong id="forecastTomorrowStartValue">--</strong>
+              </div>
+              <div class="forecast-stat">
+                <span class="stat-label">Slutt</span>
+                <strong id="forecastTomorrowEndValue">--</strong>
+              </div>
+              <div class="forecast-stat">
+                <span class="stat-label">Varighet</span>
+                <strong id="forecastTomorrowDurationValue">--</strong>
+              </div>
+              <div class="forecast-stat">
+                <span class="stat-label">Køtopp</span>
+                <strong id="forecastTomorrowPeakValue">--</strong>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="./app.js" type="module"></script>
+</body>
+</html>
