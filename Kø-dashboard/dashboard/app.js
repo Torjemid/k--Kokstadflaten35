@@ -1,4 +1,4 @@
-const DATA_URL = "./data/sample-dashboard.json";
+const DATA_URL = "https://hfhjbbzbuzebilfuydtm.supabase.co/functions/v1/clever-api";
 
 const elements = {
   clockValue: document.getElementById("clockValue"),
