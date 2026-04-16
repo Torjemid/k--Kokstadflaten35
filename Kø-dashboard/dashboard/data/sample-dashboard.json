@@ -1,0 +1,77 @@
+{
+  "updatedAt": "2026-04-16T14:35:00+02:00",
+  "current": {
+    "distanceMeters": 640,
+    "durationSec": 540,
+    "staticDurationSec": 210,
+    "delaySec": 330,
+    "queueLengthMeters": 410,
+    "segments": [
+      { "label": "Kontor", "speed": "NORMAL", "distanceMeters": 120 },
+      { "label": "Kokstaddalen inn", "speed": "SLOW", "distanceMeters": 180 },
+      { "label": "Bøy inn mot kryss", "speed": "TRAFFIC_JAM", "distanceMeters": 220 },
+      { "label": "Kryssområde", "speed": "SLOW", "distanceMeters": 120 }
+    ]
+  },
+  "today": {
+    "queueStart": "2026-04-16T14:05:00+02:00",
+    "queueEnd": null,
+    "queueDurationMinutes": 30,
+    "peakDelayMinutes": 7
+  },
+  "recentSnapshots": [
+    { "ts": "2026-04-16T12:00:00+02:00", "delaySec": 20 },
+    { "ts": "2026-04-16T12:15:00+02:00", "delaySec": 25 },
+    { "ts": "2026-04-16T12:30:00+02:00", "delaySec": 28 },
+    { "ts": "2026-04-16T12:45:00+02:00", "delaySec": 35 },
+    { "ts": "2026-04-16T13:00:00+02:00", "delaySec": 40 },
+    { "ts": "2026-04-16T13:15:00+02:00", "delaySec": 65 },
+    { "ts": "2026-04-16T13:30:00+02:00", "delaySec": 90 },
+    { "ts": "2026-04-16T13:45:00+02:00", "delaySec": 150 },
+    { "ts": "2026-04-16T14:00:00+02:00", "delaySec": 240 },
+    { "ts": "2026-04-16T14:15:00+02:00", "delaySec": 300 },
+    { "ts": "2026-04-16T14:30:00+02:00", "delaySec": 330 }
+  ],
+  "weekdayProfile": [
+    { "time": "06:30", "values": [0.1, 0.2, 0.1, 0.2, 0.1, 0, 0] },
+    { "time": "07:00", "values": [0.3, 0.4, 0.4, 0.4, 0.2, 0, 0] },
+    { "time": "07:30", "values": [0.7, 0.8, 0.9, 0.8, 0.6, 0, 0] },
+    { "time": "08:00", "values": [0.9, 1, 1, 0.9, 0.8, 0.1, 0] },
+    { "time": "08:30", "values": [0.8, 0.9, 0.9, 0.8, 0.7, 0.1, 0] },
+    { "time": "09:00", "values": [0.4, 0.5, 0.5, 0.4, 0.3, 0, 0] }
+  ],
+  "episodes": [
+    {
+      "date": "2026-04-16T00:00:00+02:00",
+      "start": "2026-04-16T14:05:00+02:00",
+      "end": null,
+      "durationMinutes": 30,
+      "maxDelayMinutes": 7,
+      "maxQueueLengthMeters": 410
+    },
+    {
+      "date": "2026-04-15T00:00:00+02:00",
+      "start": "2026-04-15T14:12:00+02:00",
+      "end": "2026-04-15T15:04:00+02:00",
+      "durationMinutes": 52,
+      "maxDelayMinutes": 8,
+      "maxQueueLengthMeters": 450
+    },
+    {
+      "date": "2026-04-14T00:00:00+02:00",
+      "start": "2026-04-14T14:18:00+02:00",
+      "end": "2026-04-14T14:56:00+02:00",
+      "durationMinutes": 38,
+      "maxDelayMinutes": 6,
+      "maxQueueLengthMeters": 350
+    },
+    {
+      "date": "2026-04-11T00:00:00+02:00",
+      "start": "2026-04-11T13:58:00+02:00",
+      "end": "2026-04-11T14:41:00+02:00",
+      "durationMinutes": 43,
+      "maxDelayMinutes": 5,
+      "maxQueueLengthMeters": 280
+    }
+  ]
+}

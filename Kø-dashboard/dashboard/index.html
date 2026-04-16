@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kokstad Queue Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Kokstad Trafikk</p>
+        <h1>Kødashboard for Kokstadflaten</h1>
+        <p class="subtitle">Fra Odfjell Drilling til krysset Kokstadflaten x Kokstadvegen</p>
+        <p class="sample-note">Viser foreløpig sampledata, ikke live trafikk.</p>
+      </div>
+      <div class="topbar-meta">
+        <div class="clock-card">
+          <span class="label">Nå</span>
+          <span id="clockValue" class="value">--:--</span>
+        </div>
+        <div class="clock-card">
+          <span class="label">Oppdatert</span>
+          <span id="updatedValue" class="value">Laster</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="dashboard-grid">
+      <section class="panel panel-hero">
+        <div class="hero-copy">
+          <span id="severityPill" class="severity-pill">Analyserer</span>
+          <h2 id="heroDelay">-- min</h2>
+          <p id="heroSummary" class="hero-summary">Laster sanntidsstatus...</p>
+          <div class="hero-kpis">
+            <div class="metric-card accent-amber">
+              <span class="metric-label">Estimert kølengde</span>
+              <strong id="queueLengthValue">-- m</strong>
+            </div>
+            <div class="metric-card accent-cyan">
+              <span class="metric-label">Reisetid nå</span>
+              <strong id="liveDurationValue">-- min</strong>
+            </div>
+            <div class="metric-card accent-slate">
+              <span class="metric-label">Normal reisetid</span>
+              <strong id="freeFlowValue">-- min</strong>
+            </div>
+          </div>
+        </div>
+        <div class="route-visual">
+          <div class="route-header">
+            <span>Rute med trafikksegmenter</span>
+            <span id="distanceValue">-- km</span>
+          </div>
+          <div id="routeStrip" class="route-strip"></div>
+          <div class="route-labels">
+            <span>Odfjell Drilling</span>
+            <span>Kokstadflaten x Kokstadvegen</span>
+          </div>
+          <div id="routeLegend" class="route-legend"></div>
+        </div>
+      </section>
+
+      <section class="panel panel-today">
+        <div class="panel-head">
+          <h3>I dag</h3>
+          <span class="muted">Start og slutt for kø</span>
+        </div>
+        <div class="stat-grid">
+          <article class="stat-tile">
+            <span class="stat-label">Kø startet</span>
+            <strong id="queueStartValue">--</strong>
+          </article>
+          <article class="stat-tile">
+            <span class="stat-label">Kø avtok</span>
+            <strong id="queueEndValue">--</strong>
+          </article>
+          <article class="stat-tile">
+            <span class="stat-label">Samlet køtid</span>
+            <strong id="queueDurationValue">--</strong>
+          </article>
+          <article class="stat-tile">
+            <span class="stat-label">Topptid</span>
+            <strong id="peakDelayValue">--</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel panel-chart">
+        <div class="panel-head">
+          <h3>Kø siste timer</h3>
+          <span class="muted">Estimert købelastning over tid</span>
+        </div>
+        <svg id="delayChart" class="chart" viewBox="0 0 640 240" preserveAspectRatio="none"></svg>
+      </section>
+
+      <section class="panel panel-heatmap">
+        <div class="panel-head">
+          <h3>Ukedagsprofil</h3>
+          <span class="muted">Når køen pleier å bygge seg opp</span>
+        </div>
+        <div id="weekdayHeatmap" class="heatmap"></div>
+      </section>
+
+      <section class="panel panel-wide">
+        <div class="panel-head">
+          <h3>Siste køepisoder</h3>
+          <span class="muted">Basert på lagrede snapshots</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Dato</th>
+                <th>Start</th>
+                <th>Slutt</th>
+                <th>Varighet</th>
+                <th>Maks forsinkelse</th>
+                <th>Maks kølengde</th>
+              </tr>
+            </thead>
+            <tbody id="episodesTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="./app.js" type="module"></script>
+</body>
+</html>
