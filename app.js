@@ -406,6 +406,12 @@ setInterval(() => {
   });
 }, 5 * 60 * 1000);
 
+// Force a full document refresh as a safety net so long-running wallboard sessions
+// pick up new frontend deployments and don't rely only on in-page polling.
+setInterval(() => {
+  window.location.reload();
+}, 5 * 60 * 1000);
+
 loadDashboard().catch((error) => {
   elements.routeSubtitle.textContent = `Kunne ikke laste dashboard-data: ${error.message}`;
 });
