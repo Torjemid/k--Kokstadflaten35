@@ -1,6 +1,14 @@
 const DATA_URL = "https://hfhjbbzbuzebilfuydtm.supabase.co/functions/v1/clever-api";
 
+const state = {
+  payload: null,
+  activeTab: "summary",
+};
+
 const elements = {
+  routeSubtitle: document.getElementById("routeSubtitle"),
+  routeTabs: document.getElementById("routeTabs"),
+  summaryGrid: document.getElementById("summaryGrid"),
   clockValue: document.getElementById("clockValue"),
   updatedValue: document.getElementById("updatedValue"),
   severityPill: document.getElementById("severityPill"),
@@ -12,6 +20,8 @@ const elements = {
   distanceValue: document.getElementById("distanceValue"),
   routeStrip: document.getElementById("routeStrip"),
   routeLegend: document.getElementById("routeLegend"),
+  originLabelValue: document.getElementById("originLabelValue"),
+  destinationLabelValue: document.getElementById("destinationLabelValue"),
   queueStartValue: document.getElementById("queueStartValue"),
   queueEndValue: document.getElementById("queueEndValue"),
   queueDurationValue: document.getElementById("queueDurationValue"),
@@ -63,20 +73,20 @@ function formatMeters(meters) {
 }
 
 function formatAxisMeters(meters) {
-  return meters >= 1000 ? `${(meters / 1000).toFixed(1).replace(".", ",")} km` : `${Math.round(meters)} m`;
+  if (meters >= 1000) {
+    return `${(meters / 1000).toFixed(1).replace(".", ",")} km`;
+  }
+  return `${Math.round(meters)} m`;
 }
 
 function niceQueueStep(maxValue) {
-  if (maxValue <= 10) {
-    return 5;
-  }
-  if (maxValue <= 30) {
+  if (maxValue <= 20) {
     return 10;
   }
   if (maxValue <= 80) {
     return 20;
   }
-  if (maxValue <= 160) {
+  if (maxValue <= 180) {
     return 40;
   }
   return 100;
@@ -103,41 +113,111 @@ function setClock() {
   }).format(new Date());
 }
 
-function severityInfo(delaySec) {
-  if (delaySec >= 300) {
-    return { label: "Tydelig kø", color: "#ff6b5f" };
+function severityInfo(delaySec, queueLengthMeters = 0) {
+  if (delaySec >= 300 || queueLengthMeters >= 300) {
+    return { label: "Tydelig ko", color: "#ff6b5f" };
   }
-  if (delaySec >= 120) {
-    return { label: "Moderat kø", color: "#ffb84d" };
+  if (delaySec >= 120 || queueLengthMeters >= 120) {
+    return { label: "Moderat ko", color: "#ffb84d" };
   }
   return { label: "Flyt i trafikken", color: "#5fd497" };
 }
 
-function renderHero(data) {
-  const info = severityInfo(data.current.delaySec);
+function renderTabs(payload) {
+  const tabs = [
+    { id: "summary", label: "Summary" },
+    ...(payload.routes ?? []).map((route) => ({
+      id: route.id,
+      label: route.tabLabel,
+    })),
+  ];
+
+  elements.routeTabs.innerHTML = "";
+  tabs.forEach((tab) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `route-tab${state.activeTab === tab.id ? " active" : ""}`;
+    button.textContent = tab.label;
+    button.addEventListener("click", () => {
+      state.activeTab = tab.id;
+      applyView();
+    });
+    elements.routeTabs.appendChild(button);
+  });
+}
+
+function renderSummarySlot(label, snapshot) {
+  if (!snapshot) {
+    return `
+      <div class="summary-slot">
+        <span class="summary-slot-label">${label}</span>
+        <strong>--</strong>
+        <span class="summary-slot-meta">Ikke tilgjengelig</span>
+      </div>
+    `;
+  }
+
+  const info = severityInfo(snapshot.delaySec, snapshot.queueLengthMeters);
+
+  return `
+    <div class="summary-slot">
+      <span class="summary-slot-label">${label}</span>
+      <strong>${formatMeters(snapshot.queueLengthMeters)}</strong>
+      <span class="summary-slot-meta">${formatMinutesFromSeconds(snapshot.delaySec)} forsinkelse</span>
+      <span class="summary-pill" style="color:${info.color};background:${info.color}1e;border-color:${info.color}33;">${info.label}</span>
+    </div>
+  `;
+}
+
+function renderSummary(payload) {
+  elements.summaryGrid.innerHTML = (payload.summary ?? [])
+    .map((item) => `
+      <article class="summary-card">
+        <div class="summary-card-head">
+          <div>
+            <h4>${item.label}</h4>
+            <p>${item.title}</p>
+          </div>
+          <span class="summary-updated">${item.updatedAt ? displayTime(item.updatedAt) : "--"}</span>
+        </div>
+        <div class="summary-slots">
+          ${renderSummarySlot("Na", item.now)}
+          ${renderSummarySlot("+30 min", item.plus30)}
+          ${renderSummarySlot("+1 time", item.plus60)}
+        </div>
+      </article>
+    `)
+    .join("");
+}
+
+function renderHero(route) {
+  const info = severityInfo(route.current.delaySec, route.current.queueLengthMeters);
   elements.severityPill.textContent = info.label;
   elements.severityPill.style.color = info.color;
   elements.severityPill.style.background = `${info.color}1e`;
   elements.severityPill.style.borderColor = `${info.color}33`;
 
-  elements.heroDelay.textContent = formatMinutes(data.current.delaySec / 60);
+  elements.heroDelay.textContent = formatMinutes(route.current.delaySec / 60);
   elements.heroSummary.textContent =
-    `Strekningen bruker nå ${formatMinutesFromSeconds(data.current.durationSec)} mot ` +
-    `${formatMinutesFromSeconds(data.current.staticDurationSec)} under normal flyt. ` +
-    `Estimert købelastning ligger på ${formatMeters(data.current.queueLengthMeters)} av ruten.`;
-  elements.queueLengthValue.textContent = formatMeters(data.current.queueLengthMeters);
-  elements.liveDurationValue.textContent = formatMinutesFromSeconds(data.current.durationSec);
-  elements.freeFlowValue.textContent = formatMinutesFromSeconds(data.current.staticDurationSec);
-  elements.distanceValue.textContent = formatMeters(data.current.distanceMeters);
-  elements.updatedValue.textContent = formatTime(data.updatedAt);
+    `Strekningen bruker na ${formatMinutesFromSeconds(route.current.durationSec)} mot ` +
+    `${formatMinutesFromSeconds(route.current.staticDurationSec)} under normal flyt. ` +
+    `Estimert kobelastning ligger pa ${formatMeters(route.current.queueLengthMeters)} av ruten.`;
+  elements.queueLengthValue.textContent = formatMeters(route.current.queueLengthMeters);
+  elements.liveDurationValue.textContent = formatMinutesFromSeconds(route.current.durationSec);
+  elements.freeFlowValue.textContent = formatMinutesFromSeconds(route.current.staticDurationSec);
+  elements.distanceValue.textContent = formatMeters(route.current.distanceMeters);
+  elements.updatedValue.textContent = route.updatedAt ? formatTime(route.updatedAt) : "--";
+  elements.routeSubtitle.textContent = route.subtitle;
+  elements.originLabelValue.textContent = route.originLabel;
+  elements.destinationLabelValue.textContent = route.destinationLabel;
 }
 
-function renderRoute(data) {
+function renderRoute(route) {
   elements.routeStrip.innerHTML = "";
-  data.current.segments.forEach((segment) => {
+  route.current.segments.forEach((segment) => {
     const el = document.createElement("div");
     el.className = `route-segment speed-${segment.speed.toLowerCase().replace("traffic_jam", "jam")}`;
-    el.style.setProperty("--segment-weight", String(Math.max(0.8, segment.distanceMeters / 120)));
+    el.style.setProperty("--segment-weight", String(Math.max(0.8, segment.distanceMeters / 180)));
     el.innerHTML = `<span>${segment.label}</span>`;
     elements.routeStrip.appendChild(el);
   });
@@ -145,30 +225,32 @@ function renderRoute(data) {
   elements.routeLegend.innerHTML = `
     <span class="legend-chip normal">Normal</span>
     <span class="legend-chip slow">Sakte</span>
-    <span class="legend-chip jam">Kø</span>
+    <span class="legend-chip jam">Ko</span>
   `;
 }
 
-function renderTodayStats(data) {
-  elements.queueStartValue.textContent = data.today.queueStart ? displayTime(data.today.queueStart) : "Ingen tydelig kø";
-  elements.queueEndValue.textContent = data.today.queueEnd ? displayTime(data.today.queueEnd) : "Pågår";
-  elements.queueDurationValue.textContent = formatMinutes(data.today.queueDurationMinutes);
-  elements.peakDelayValue.textContent = formatMinutes(data.today.peakDelayMinutes);
+function renderTodayStats(route) {
+  elements.queueStartValue.textContent = route.today.queueStart ? displayTime(route.today.queueStart) : "Ingen tydelig ko";
+  elements.queueEndValue.textContent = route.today.queueEnd ? displayTime(route.today.queueEnd) : "Pagar";
+  elements.queueDurationValue.textContent = formatMinutes(route.today.queueDurationMinutes);
+  elements.peakDelayValue.textContent = formatMinutes(route.today.peakDelayMinutes);
 }
 
-function renderQueueChart(data) {
+function renderQueueChart(route) {
   const svg = elements.delayChart;
   const width = 640;
   const height = 220;
-  const padding = { top: 22, right: 16, bottom: 28, left: 48 };
-  const points = data.recentSnapshots?.length
-    ? data.recentSnapshots
-    : [{ ts: data.updatedAt, queueLengthMeters: 0 }];
+  const padding = { top: 24, right: 12, bottom: 28, left: 54 };
+  const points = route.recentSnapshots?.length
+    ? route.recentSnapshots
+    : [{ ts: route.updatedAt, queueLengthMeters: 0 }];
   const actualMaxQueue = Math.max(...points.map((item) => item.queueLengthMeters ?? 0), 0);
   const step = niceQueueStep(actualMaxQueue);
-  const maxQueue = Math.max(step * 2, Math.ceil(Math.max(actualMaxQueue, 1) / step) * step);
+  const maxQueue = Math.max(40, Math.ceil(Math.max(actualMaxQueue, 1) / step) * step);
   const innerWidth = width - padding.left - padding.right;
   const innerHeight = height - padding.top - padding.bottom;
+  const labelIndexes = evenlySpacedIndexes(points.length, 5);
+  const tickValues = [0, maxQueue / 2, maxQueue].map((value) => Math.round(value / step) * step);
 
   const x = (index) => padding.left + (index / Math.max(points.length - 1, 1)) * innerWidth;
   const y = (value) => padding.top + innerHeight - (value / maxQueue) * innerHeight;
@@ -181,18 +263,17 @@ function renderQueueChart(data) {
     `${linePath} L ${x(points.length - 1).toFixed(1)} ${height - padding.bottom} ` +
     `L ${x(0).toFixed(1)} ${height - padding.bottom} Z`;
 
-  const tickValues = Array.from({ length: Math.max(2, Math.round(maxQueue / step)) + 1 }, (_, index) => index * step);
-  const gridLines = tickValues
-    .filter((value) => value > 0)
+  const gridLines = [...new Set(tickValues.filter((value) => value > 0))]
     .map((value) => {
-    const pos = y(value);
-    return `
-      <line x1="${padding.left}" y1="${pos}" x2="${width - padding.right}" y2="${pos}" stroke="rgba(255,255,255,0.08)" />
-      <text x="${padding.left - 8}" y="${pos + 4}" text-anchor="end" fill="rgba(150,168,189,0.88)" font-size="11">${formatAxisMeters(value)}</text>
-    `;
-  }).join("");
+      const pos = y(value);
+      return `
+        <line x1="${padding.left}" y1="${pos}" x2="${width - padding.right}" y2="${pos}" stroke="rgba(255,255,255,0.08)" />
+        <text x="${padding.left - 10}" y="${pos + 4}" text-anchor="end" fill="rgba(150,168,189,0.88)" font-size="11">${formatAxisMeters(value)}</text>
+      `;
+    })
+    .join("");
 
-  const labels = evenlySpacedIndexes(points.length, 4)
+  const labels = labelIndexes
     .map((index) => `
       <text x="${x(index)}" y="${height - 8}" text-anchor="middle" fill="rgba(150,168,189,0.9)" font-size="11">
         ${displayTime(points[index].ts)}
@@ -201,21 +282,21 @@ function renderQueueChart(data) {
     .join("");
 
   const emptyState = actualMaxQueue === 0
-    ? `<text x="${padding.left}" y="${padding.top - 4}" fill="rgba(150,168,189,0.72)" font-size="11">Ingen målbar kø siste målinger</text>`
+    ? `<text x="${padding.left}" y="${padding.top - 6}" fill="rgba(150,168,189,0.72)" font-size="11">Flat trend siste maalinger</text>`
     : "";
 
   svg.innerHTML = `
     <defs>
       <linearGradient id="queueArea" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="rgba(255,184,77,0.40)" />
-        <stop offset="100%" stop-color="rgba(255,184,77,0.03)" />
+        <stop offset="0%" stop-color="rgba(255,184,77,0.36)" />
+        <stop offset="100%" stop-color="rgba(255,184,77,0.02)" />
       </linearGradient>
     </defs>
     <line x1="${padding.left}" y1="${y(0)}" x2="${width - padding.right}" y2="${y(0)}" stroke="rgba(255,255,255,0.08)" />
     ${gridLines}
     ${emptyState}
     <path d="${areaPath}" fill="url(#queueArea)"></path>
-    <path d="${linePath}" fill="none" stroke="#ffb84d" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"></path>
+    <path d="${linePath}" fill="none" stroke="#ffb84d" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"></path>
     ${points.map((point, index) => `
       <circle cx="${x(index)}" cy="${y(point.queueLengthMeters ?? 0)}" r="4" fill="#08111a" stroke="#54d5ff" stroke-width="2"></circle>
     `).join("")}
@@ -231,8 +312,8 @@ function heatColor(value) {
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
 
-function renderHeatmap(data) {
-  const days = ["Man", "Tir", "Ons", "Tor", "Fre", "Lør", "Søn"];
+function renderHeatmap(route) {
+  const days = ["Man", "Tir", "Ons", "Tor", "Fre", "Lor", "Son"];
   const container = elements.weekdayHeatmap;
   container.innerHTML = "";
 
@@ -244,7 +325,7 @@ function renderHeatmap(data) {
     container.appendChild(el);
   });
 
-  data.weekdayProfile.forEach((row) => {
+  route.weekdayProfile.forEach((row) => {
     const label = document.createElement("div");
     label.className = "heatmap-row-label";
     label.textContent = row.time;
@@ -268,26 +349,63 @@ function fillForecast(prefix, payload) {
   elements[`${prefix}PeakValue`].textContent = payload ? formatMeters(payload.peakQueueLengthMeters ?? 0) : fallbackText;
 }
 
-function renderForecasts(data) {
-  fillForecast("yesterday", data.yesterday);
-  fillForecast("forecastToday", data.forecastToday);
-  fillForecast("forecastTomorrow", data.forecastTomorrow);
+function renderForecasts(route) {
+  fillForecast("yesterday", route.yesterday);
+  fillForecast("forecastToday", route.forecastToday);
+  fillForecast("forecastTomorrow", route.forecastTomorrow);
+}
+
+function applyView() {
+  if (!state.payload) {
+    return;
+  }
+
+  renderTabs(state.payload);
+
+  if (state.activeTab === "summary") {
+    document.body.classList.add("summary-mode");
+    document.body.classList.remove("route-mode");
+    elements.routeSubtitle.textContent = "Oversikt over fire ruter fra Kokstad, med estimering na og frem i tid.";
+    elements.updatedValue.textContent = formatTime(state.payload.updatedAt);
+    renderSummary(state.payload);
+    return;
+  }
+
+  const route = state.payload.routes.find((item) => item.id === state.activeTab) ?? state.payload.routes[0];
+  if (!route) {
+    return;
+  }
+
+  document.body.classList.remove("summary-mode");
+  document.body.classList.add("route-mode");
+  renderHero(route);
+  renderRoute(route);
+  renderTodayStats(route);
+  renderQueueChart(route);
+  renderHeatmap(route);
+  renderForecasts(route);
 }
 
 async function loadDashboard() {
   const response = await fetch(DATA_URL, { cache: "no-store" });
   const data = await response.json();
 
-  renderHero(data);
-  renderRoute(data);
-  renderTodayStats(data);
-  renderQueueChart(data);
-  renderHeatmap(data);
-  renderForecasts(data);
+  state.payload = data;
+  if (state.activeTab !== "summary" && !data.routes.some((route) => route.id === state.activeTab)) {
+    state.activeTab = "summary";
+  }
+
+  applyView();
 }
 
 setClock();
 setInterval(setClock, 1000);
+setInterval(() => {
+  loadDashboard().catch((error) => {
+    elements.routeSubtitle.textContent = `Kunne ikke oppdatere dashboard-data: ${error.message}`;
+  });
+}, 5 * 60 * 1000);
+
 loadDashboard().catch((error) => {
-  elements.heroSummary.textContent = `Kunne ikke laste dashboard-data: ${error.message}`;
+  elements.routeSubtitle.textContent = `Kunne ikke laste dashboard-data: ${error.message}`;
 });
