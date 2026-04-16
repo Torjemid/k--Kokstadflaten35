@@ -66,6 +66,35 @@ function formatAxisMeters(meters) {
   return meters >= 1000 ? `${(meters / 1000).toFixed(1).replace(".", ",")} km` : `${Math.round(meters)} m`;
 }
 
+function niceQueueStep(maxValue) {
+  if (maxValue <= 10) {
+    return 5;
+  }
+  if (maxValue <= 30) {
+    return 10;
+  }
+  if (maxValue <= 80) {
+    return 20;
+  }
+  if (maxValue <= 160) {
+    return 40;
+  }
+  return 100;
+}
+
+function evenlySpacedIndexes(length, count) {
+  if (length <= count) {
+    return [...Array(length).keys()];
+  }
+
+  const indexes = new Set([0, length - 1]);
+  for (let i = 1; i < count - 1; i += 1) {
+    indexes.add(Math.round((i / (count - 1)) * (length - 1)));
+  }
+
+  return [...indexes].sort((a, b) => a - b);
+}
+
 function setClock() {
   elements.clockValue.textContent = new Intl.DateTimeFormat("nb-NO", {
     hour: "2-digit",
@@ -131,11 +160,13 @@ function renderQueueChart(data) {
   const svg = elements.delayChart;
   const width = 640;
   const height = 220;
-  const padding = { top: 16, right: 18, bottom: 30, left: 34 };
+  const padding = { top: 22, right: 16, bottom: 28, left: 48 };
   const points = data.recentSnapshots?.length
     ? data.recentSnapshots
     : [{ ts: data.updatedAt, queueLengthMeters: 0 }];
-  const maxQueue = Math.max(...points.map((item) => item.queueLengthMeters ?? 0), 120);
+  const actualMaxQueue = Math.max(...points.map((item) => item.queueLengthMeters ?? 0), 0);
+  const step = niceQueueStep(actualMaxQueue);
+  const maxQueue = Math.max(step * 2, Math.ceil(Math.max(actualMaxQueue, 1) / step) * step);
   const innerWidth = width - padding.left - padding.right;
   const innerHeight = height - padding.top - padding.bottom;
 
@@ -150,29 +181,28 @@ function renderQueueChart(data) {
     `${linePath} L ${x(points.length - 1).toFixed(1)} ${height - padding.bottom} ` +
     `L ${x(0).toFixed(1)} ${height - padding.bottom} Z`;
 
-  const gridLines = Array.from({ length: 4 }, (_, index) => {
-    const value = (maxQueue / 4) * (index + 1);
+  const tickValues = Array.from({ length: Math.max(2, Math.round(maxQueue / step)) + 1 }, (_, index) => index * step);
+  const gridLines = tickValues
+    .filter((value) => value > 0)
+    .map((value) => {
     const pos = y(value);
     return `
       <line x1="${padding.left}" y1="${pos}" x2="${width - padding.right}" y2="${pos}" stroke="rgba(255,255,255,0.08)" />
-      <text x="${padding.left}" y="${pos - 6}" fill="rgba(150,168,189,0.9)" font-size="11">${formatAxisMeters(value)}</text>
+      <text x="${padding.left - 8}" y="${pos + 4}" text-anchor="end" fill="rgba(150,168,189,0.88)" font-size="11">${formatAxisMeters(value)}</text>
     `;
   }).join("");
 
-  const labelIndexes = new Set(
-    points.map((_, index) => index).filter((index) => {
-      const step = Math.max(1, Math.floor(points.length / 5));
-      return index % step === 0 || index === points.length - 1;
-    }),
-  );
-
-  const labels = Array.from(labelIndexes)
+  const labels = evenlySpacedIndexes(points.length, 4)
     .map((index) => `
       <text x="${x(index)}" y="${height - 8}" text-anchor="middle" fill="rgba(150,168,189,0.9)" font-size="11">
         ${displayTime(points[index].ts)}
       </text>
     `)
     .join("");
+
+  const emptyState = actualMaxQueue === 0
+    ? `<text x="${padding.left}" y="${padding.top - 4}" fill="rgba(150,168,189,0.72)" font-size="11">Ingen målbar kø siste målinger</text>`
+    : "";
 
   svg.innerHTML = `
     <defs>
@@ -181,7 +211,9 @@ function renderQueueChart(data) {
         <stop offset="100%" stop-color="rgba(255,184,77,0.03)" />
       </linearGradient>
     </defs>
+    <line x1="${padding.left}" y1="${y(0)}" x2="${width - padding.right}" y2="${y(0)}" stroke="rgba(255,255,255,0.08)" />
     ${gridLines}
+    ${emptyState}
     <path d="${areaPath}" fill="url(#queueArea)"></path>
     <path d="${linePath}" fill="none" stroke="#ffb84d" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"></path>
     ${points.map((point, index) => `
@@ -229,7 +261,7 @@ function renderHeatmap(data) {
 }
 
 function fillForecast(prefix, payload) {
-  const fallbackText = payload?.sampleSize ? "--" : "For lite data";
+  const fallbackText = payload?.sampleSize ? "--" : "Bygger historikk";
   elements[`${prefix}StartValue`].textContent = payload?.startLabel ?? fallbackText;
   elements[`${prefix}EndValue`].textContent = payload?.endLabel ?? fallbackText;
   elements[`${prefix}DurationValue`].textContent = payload ? formatMinutes(payload.durationMinutes ?? 0) : fallbackText;
