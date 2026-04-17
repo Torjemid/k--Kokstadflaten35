@@ -139,18 +139,18 @@ function isActiveRefreshMinute(date) {
   }
 
   if (totalMinutes < 14 * 60) {
-    return minute % 10 === 0;
+    return minute % 15 === 0;
   }
 
   if (totalMinutes < 14 * 60 + 30) {
-    return minute % 5 === 0;
+    return minute % 10 === 0;
   }
 
   if (totalMinutes < 16 * 60 + 30) {
-    return minute % 2 === 0;
+    return minute % 3 === 0;
   }
 
-  return minute % 5 === 0;
+  return minute % 10 === 0;
 }
 
 function getRefreshDelayMs(now = new Date()) {
@@ -506,28 +506,42 @@ function heatColor(value) {
 
 function renderHeatmap(route) {
   const days = state.payload?.weekdayLabels ?? ["Man", "Tir", "Ons", "Tor", "Fre"];
+  const slots = route.weekdayProfile ?? [];
   const container = elements.weekdayHeatmap;
   container.innerHTML = "";
 
-  container.appendChild(document.createElement("div"));
-  days.forEach((day) => {
+  const corner = document.createElement("div");
+  corner.className = "heatmap-corner";
+  corner.textContent = "Tid";
+  container.appendChild(corner);
+
+  slots.forEach((row, index) => {
     const el = document.createElement("div");
     el.className = "heatmap-header";
-    el.textContent = day;
+    el.textContent = index % 2 === 0 ? row.time : "";
     container.appendChild(el);
   });
 
-  (route.weekdayProfile ?? []).forEach((row) => {
+  days.forEach((day, dayIndex) => {
     const label = document.createElement("div");
     label.className = "heatmap-row-label";
-    label.textContent = row.time;
+    label.textContent = day;
     container.appendChild(label);
 
-    row.values.forEach((value) => {
+    slots.forEach((row, slotIndex) => {
+      const value = row.values?.[dayIndex] ?? 0;
       const cell = document.createElement("div");
       cell.className = "heatmap-cell";
       cell.style.background = heatColor(value);
-      cell.textContent = `${Math.round(value * 10) / 10}`;
+      if (value >= 0.7) {
+        cell.classList.add("is-strong");
+      } else if (value >= 0.35) {
+        cell.classList.add("is-medium");
+      }
+      cell.title = `${day} ${row.time}: ${Math.round(value * 100)} % av typisk toppnivå`;
+      if (slotIndex % 2 === 0) {
+        cell.dataset.time = row.time;
+      }
       container.appendChild(cell);
     });
   });
