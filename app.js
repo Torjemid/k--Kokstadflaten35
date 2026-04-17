@@ -317,13 +317,17 @@ function renderHero(route) {
 
 function renderRoute(route) {
   elements.routeStrip.innerHTML = "";
-  (route.current.segments ?? []).forEach((segment) => {
+  (route.current?.segments ?? []).forEach((segment) => {
     const el = document.createElement("div");
     el.className = `route-segment speed-${String(segment.speed ?? "NORMAL").toLowerCase().replace("traffic_jam", "jam")}`;
     el.style.setProperty("--segment-weight", String(Math.max(0.8, (segment.distanceMeters ?? 0) / 180)));
     el.innerHTML = `<span>${segment.label}</span>`;
     elements.routeStrip.appendChild(el);
   });
+
+  if (!route.current?.segments?.length) {
+    elements.routeStrip.innerHTML = `<div class="route-segment speed-normal" style="--segment-weight:1;"><span>Ingen snapshot ennå</span></div>`;
+  }
 
   elements.routeLegend.innerHTML = `
     <span class="legend-chip normal">Normal</span>
@@ -337,6 +341,45 @@ function renderTodayStats(route) {
   elements.queueEndValue.textContent = route.today.queueEnd ? displayTime(route.today.queueEnd) : "Pågår";
   elements.queueDurationValue.textContent = formatMinutes(route.today.queueDurationMinutes ?? 0);
   elements.peakDelayValue.textContent = formatMinutes(route.today.peakDelayMinutes ?? 0);
+}
+
+function renderUnavailableRoute(route) {
+  elements.routeSubtitle.textContent = `${route.subtitle} (venter på første måling)`;
+  elements.updatedValue.textContent = route.updatedAt ? formatTime(route.updatedAt) : "Ikke tilgjengelig";
+  elements.originLabelValue.textContent = route.originLabel;
+  elements.destinationLabelValue.textContent = route.destinationLabel;
+  elements.severityPill.textContent = "Venter på data";
+  elements.severityPill.style.color = "#9fb3c8";
+  elements.severityPill.style.background = "rgba(159,179,200,0.12)";
+  elements.severityPill.style.borderColor = "rgba(159,179,200,0.22)";
+  elements.heroDelay.textContent = "-- min";
+  elements.heroSummary.textContent =
+    "Denne ruten er lagt til, men har ennå ikke fått første lagrede snapshot. Kjør poll-funksjonen én gang manuelt eller vent til neste planlagte polling.";
+  elements.queueLengthValue.textContent = "-- m";
+  elements.liveDurationValue.textContent = "-- min";
+  elements.freeFlowValue.textContent = "-- min";
+  elements.distanceValue.textContent = "-- km";
+  renderRoute(route);
+  elements.queueStartValue.textContent = "--";
+  elements.queueEndValue.textContent = "--";
+  elements.queueDurationValue.textContent = "--";
+  elements.peakDelayValue.textContent = "--";
+  renderQueueChart({
+    queueChart: {
+      slots: state.payload?.queueChart?.slots ?? [],
+      today: (state.payload?.queueChart?.slots ?? []).map(() => ({ queueLengthMeters: 0, delaySec: 0 })),
+      yesterday: (state.payload?.queueChart?.slots ?? []).map(() => ({ queueLengthMeters: 0, delaySec: 0 })),
+      average: (state.payload?.queueChart?.slots ?? []).map(() => ({ queueLengthMeters: 0, delaySec: 0 })),
+    },
+  });
+  renderHeatmap({
+    weekdayProfile:
+      state.payload?.weekdayProfile ??
+      [],
+  });
+  fillForecast("yesterday", null);
+  fillForecast("forecastToday", null);
+  fillForecast("forecastTomorrow", null);
 }
 
 function renderQueueChart(route) {
@@ -521,12 +564,16 @@ function applyView() {
   }
 
   const route = state.payload.routes.find((item) => item.id === state.activeTab) ?? state.payload.routes[0];
-  if (!route || !route.current) {
+  if (!route) {
     return;
   }
 
   document.body.classList.remove("summary-mode");
   document.body.classList.add("route-mode");
+  if (!route.current) {
+    renderUnavailableRoute(route);
+    return;
+  }
   renderHero(route);
   renderRoute(route);
   renderTodayStats(route);
