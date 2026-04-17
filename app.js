@@ -514,7 +514,7 @@ function applyView() {
   if (state.activeTab === "summary") {
     document.body.classList.add("summary-mode");
     document.body.classList.remove("route-mode");
-    elements.routeSubtitle.textContent = "Oversikt over fire ruter fra Kokstad, med estimering nå og frem i tid.";
+    elements.routeSubtitle.textContent = "Oversikt over flere ruter fra Kokstad, med estimering nå og frem i tid.";
     elements.updatedValue.textContent = state.payload.updatedAt ? formatTime(state.payload.updatedAt) : "Laster";
     renderSummary(state.payload);
     return;
