@@ -44,77 +44,6 @@ const elements = {
   forecastTomorrowPeakValue: document.getElementById("forecastTomorrowPeakValue"),
 };
 
-function formatTime(value) {
-  const date = new Date(value);
-  return new Intl.DateTimeFormat("nb-NO", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
-
-function displayTime(value) {
-  if (!value) {
-    return "--";
-  }
-  return value.includes("T") ? formatTime(value) : value;
-}
-
-function formatMinutesFromSeconds(seconds) {
-  return `${Math.round(seconds / 60)} min`;
-}
-
-function formatMinutes(value) {
-  return `${Math.round(value)} min`;
-}
-
-function formatMeters(meters) {
-  if (meters >= 1000) {
-    return `${(meters / 1000).toFixed(2).replace(".", ",")} km`;
-  }
-  return `${Math.round(meters)} m`;
-}
-
-function formatAxisMeters(meters) {
-  if (meters >= 1000) {
-    return `${(meters / 1000).toFixed(1).replace(".", ",")} km`;
-  }
-  return `${Math.round(meters)} m`;
-}
-
-function niceQueueStep(maxValue) {
-  if (maxValue <= 20) {
-    return 10;
-  }
-  if (maxValue <= 80) {
-    return 20;
-  }
-  if (maxValue <= 180) {
-    return 40;
-  }
-  return 100;
-}
-
-function evenlySpacedIndexes(length, count) {
-  if (length <= count) {
-    return [...Array(length).keys()];
-  }
-
-  const indexes = new Set([0, length - 1]);
-  for (let i = 1; i < count - 1; i += 1) {
-    indexes.add(Math.round((i / (count - 1)) * (length - 1)));
-  }
-
-  return [...indexes].sort((a, b) => a - b);
-}
-
-function setClock() {
-  elements.clockValue.textContent = new Intl.DateTimeFormat("nb-NO", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).format(new Date());
-}
-
 function getStoredActiveTab() {
   try {
     return window.localStorage.getItem(ACTIVE_TAB_STORAGE_KEY) ?? "summary";
@@ -131,17 +60,77 @@ function setStoredActiveTab(tabId) {
   }
 }
 
+function formatTime(value) {
+  const date = new Date(value);
+  return new Intl.DateTimeFormat("nb-NO", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function displayTime(value) {
+  if (!value) {
+    return "--";
+  }
+  return value.includes("T") ? formatTime(value) : value;
+}
+
+function formatMinutesFromSeconds(seconds) {
+  return `${Math.round((seconds ?? 0) / 60)} min`;
+}
+
+function formatMinutes(value) {
+  return `${Math.round(value ?? 0)} min`;
+}
+
+function formatMeters(meters) {
+  if ((meters ?? 0) >= 1000) {
+    return `${((meters ?? 0) / 1000).toFixed(2).replace(".", ",")} km`;
+  }
+  return `${Math.round(meters ?? 0)} m`;
+}
+
+function formatAxisMeters(meters) {
+  if ((meters ?? 0) >= 1000) {
+    return `${((meters ?? 0) / 1000).toFixed(1).replace(".", ",")} km`;
+  }
+  return `${Math.round(meters ?? 0)} m`;
+}
+
+function niceQueueStep(maxValue) {
+  if (maxValue <= 40) {
+    return 10;
+  }
+  if (maxValue <= 120) {
+    return 20;
+  }
+  if (maxValue <= 240) {
+    return 40;
+  }
+  if (maxValue <= 500) {
+    return 100;
+  }
+  return 200;
+}
+
+function setClock() {
+  elements.clockValue.textContent = new Intl.DateTimeFormat("nb-NO", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date());
+}
+
 function isActiveRefreshMinute(date) {
   const day = date.getDay();
-  const isWeekend = day === 0 || day === 6;
-  if (isWeekend) {
+  if (day === 0 || day === 6) {
     return false;
   }
 
   const totalMinutes = date.getHours() * 60 + date.getMinutes();
   const minute = date.getMinutes();
 
-  if (totalMinutes < 8 * 60 || totalMinutes > 17 * 60) {
+  if (totalMinutes < 8 * 60 || totalMinutes >= 17 * 60) {
     return false;
   }
 
@@ -208,14 +197,14 @@ function getSummaryTrend(baseSnapshot, targetSnapshot) {
   const delta = summaryTrendScore(targetSnapshot) - summaryTrendScore(baseSnapshot);
 
   if (Math.abs(delta) < 45) {
-    return { icon: "&#8594;", label: "Stabil", className: "flat" };
+    return { icon: "→", label: "Stabil", className: "flat" };
   }
 
   if (delta > 0) {
-    return { icon: "&#8599;", label: "Opp", className: "up" };
+    return { icon: "↗", label: "Opp", className: "up" };
   }
 
-  return { icon: "&#8600;", label: "Ned", className: "down" };
+  return { icon: "↘", label: "Ned", className: "down" };
 }
 
 function renderTabs(payload) {
@@ -255,7 +244,7 @@ function renderSummarySlot(label, snapshot, thresholds, trend = null) {
     `;
   }
 
-  const info = severityInfo(snapshot.delaySec, thresholds);
+  const info = severityInfo(snapshot.delaySec ?? 0, thresholds);
   const trendMarkup = trend
     ? `
       <span class="summary-trend trend-${trend.className}">
@@ -271,8 +260,8 @@ function renderSummarySlot(label, snapshot, thresholds, trend = null) {
         <span class="summary-slot-label">${label}</span>
         ${trendMarkup}
       </div>
-      <strong>${formatMeters(snapshot.queueLengthMeters)}</strong>
-      <span class="summary-slot-meta">${formatMinutesFromSeconds(snapshot.delaySec)} forsinkelse</span>
+      <strong>${formatMeters(snapshot.queueLengthMeters ?? 0)}</strong>
+      <span class="summary-slot-meta">${formatMinutesFromSeconds(snapshot.delaySec ?? 0)} forsinkelse</span>
       <span class="summary-pill" style="color:${info.color};background:${info.color}1e;border-color:${info.color}33;">${info.label}</span>
     </div>
   `;
@@ -286,40 +275,40 @@ function renderSummary(payload) {
 
       return `
         <article class="summary-card">
-        <div class="summary-card-head">
-          <div>
-            <h4>${item.label}</h4>
-            <p>${item.title}</p>
+          <div class="summary-card-head">
+            <div>
+              <h4>${item.label}</h4>
+              <p>${item.title}</p>
+            </div>
+            <span class="summary-updated">${item.updatedAt ? displayTime(item.updatedAt) : "--"}</span>
           </div>
-          <span class="summary-updated">${item.updatedAt ? displayTime(item.updatedAt) : "--"}</span>
-        </div>
-        <div class="summary-slots">
-          ${renderSummarySlot("Nå", item.now, item.thresholds)}
-          ${renderSummarySlot("+30 min", item.plus30, item.thresholds, trendTo30)}
-          ${renderSummarySlot("+1 time", item.plus60, item.thresholds, trendTo60)}
-        </div>
-      </article>
+          <div class="summary-slots">
+            ${renderSummarySlot("Nå", item.now, item.thresholds)}
+            ${renderSummarySlot("+30 min", item.plus30, item.thresholds, trendTo30)}
+            ${renderSummarySlot("+1 time", item.plus60, item.thresholds, trendTo60)}
+          </div>
+        </article>
       `;
     })
     .join("");
 }
 
 function renderHero(route) {
-  const info = severityInfo(route.current.delaySec, route.thresholds);
+  const info = severityInfo(route.current.delaySec ?? 0, route.thresholds);
   elements.severityPill.textContent = info.label;
   elements.severityPill.style.color = info.color;
   elements.severityPill.style.background = `${info.color}1e`;
   elements.severityPill.style.borderColor = `${info.color}33`;
 
-  elements.heroDelay.textContent = formatMinutes(route.current.delaySec / 60);
+  elements.heroDelay.textContent = formatMinutes((route.current.delaySec ?? 0) / 60);
   elements.heroSummary.textContent =
-    `Strekningen bruker nå ${formatMinutesFromSeconds(route.current.durationSec)} mot ` +
-    `${formatMinutesFromSeconds(route.current.staticDurationSec)} under normal flyt. ` +
-    `Estimert købelastning ligger på ${formatMeters(route.current.queueLengthMeters)} av ruten.`;
-  elements.queueLengthValue.textContent = formatMeters(route.current.queueLengthMeters);
-  elements.liveDurationValue.textContent = formatMinutesFromSeconds(route.current.durationSec);
-  elements.freeFlowValue.textContent = formatMinutesFromSeconds(route.current.staticDurationSec);
-  elements.distanceValue.textContent = formatMeters(route.current.distanceMeters);
+    `Strekningen bruker nå ${formatMinutesFromSeconds(route.current.durationSec ?? 0)} mot ` +
+    `${formatMinutesFromSeconds(route.current.staticDurationSec ?? 0)} under normal flyt. ` +
+    `Estimert købelastning ligger på ${formatMeters(route.current.queueLengthMeters ?? 0)} av ruten.`;
+  elements.queueLengthValue.textContent = formatMeters(route.current.queueLengthMeters ?? 0);
+  elements.liveDurationValue.textContent = formatMinutesFromSeconds(route.current.durationSec ?? 0);
+  elements.freeFlowValue.textContent = formatMinutesFromSeconds(route.current.staticDurationSec ?? 0);
+  elements.distanceValue.textContent = formatMeters(route.current.distanceMeters ?? 0);
   elements.updatedValue.textContent = route.updatedAt ? formatTime(route.updatedAt) : "--";
   elements.routeSubtitle.textContent = route.subtitle;
   elements.originLabelValue.textContent = route.originLabel;
@@ -328,10 +317,10 @@ function renderHero(route) {
 
 function renderRoute(route) {
   elements.routeStrip.innerHTML = "";
-  route.current.segments.forEach((segment) => {
+  (route.current.segments ?? []).forEach((segment) => {
     const el = document.createElement("div");
-    el.className = `route-segment speed-${segment.speed.toLowerCase().replace("traffic_jam", "jam")}`;
-    el.style.setProperty("--segment-weight", String(Math.max(0.8, segment.distanceMeters / 180)));
+    el.className = `route-segment speed-${String(segment.speed ?? "NORMAL").toLowerCase().replace("traffic_jam", "jam")}`;
+    el.style.setProperty("--segment-weight", String(Math.max(0.8, (segment.distanceMeters ?? 0) / 180)));
     el.innerHTML = `<span>${segment.label}</span>`;
     elements.routeStrip.appendChild(el);
   });
@@ -346,35 +335,62 @@ function renderRoute(route) {
 function renderTodayStats(route) {
   elements.queueStartValue.textContent = route.today.queueStart ? displayTime(route.today.queueStart) : "Ingen tydelig kø";
   elements.queueEndValue.textContent = route.today.queueEnd ? displayTime(route.today.queueEnd) : "Pågår";
-  elements.queueDurationValue.textContent = formatMinutes(route.today.queueDurationMinutes);
-  elements.peakDelayValue.textContent = formatMinutes(route.today.peakDelayMinutes);
+  elements.queueDurationValue.textContent = formatMinutes(route.today.queueDurationMinutes ?? 0);
+  elements.peakDelayValue.textContent = formatMinutes(route.today.peakDelayMinutes ?? 0);
 }
 
 function renderQueueChart(route) {
   const svg = elements.delayChart;
   const width = 640;
   const height = 220;
-  const padding = { top: 24, right: 12, bottom: 28, left: 54 };
-  const points = route.recentSnapshots?.length
-    ? route.recentSnapshots
-    : [{ ts: route.updatedAt, queueLengthMeters: 0 }];
-  const actualMaxQueue = Math.max(...points.map((item) => item.queueLengthMeters ?? 0), 0);
+  const padding = { top: 28, right: 12, bottom: 30, left: 54 };
+
+  const chart = route.queueChart ?? {
+    slots: [],
+    today: [],
+    yesterday: [],
+    average: [],
+  };
+
+  const slots = chart.slots ?? [];
+  const todaySeries = chart.today ?? [];
+  const yesterdaySeries = chart.yesterday ?? [];
+  const averageSeries = chart.average ?? [];
+
+  if (!slots.length) {
+    svg.innerHTML = "";
+    return;
+  }
+
+  const allValues = [
+    ...todaySeries.map((item) => item.queueLengthMeters ?? 0),
+    ...yesterdaySeries.map((item) => item.queueLengthMeters ?? 0),
+    ...averageSeries.map((item) => item.queueLengthMeters ?? 0),
+  ];
+
+  const actualMaxQueue = Math.max(...allValues, 0);
   const step = niceQueueStep(actualMaxQueue);
   const maxQueue = Math.max(40, Math.ceil(Math.max(actualMaxQueue, 1) / step) * step);
   const innerWidth = width - padding.left - padding.right;
   const innerHeight = height - padding.top - padding.bottom;
-  const labelIndexes = evenlySpacedIndexes(points.length, 5);
   const tickValues = [0, maxQueue / 2, maxQueue].map((value) => Math.round(value / step) * step);
+  const labelIndexes = slots
+    .map((slot, index) => ({ slot, index }))
+    .filter(({ slot }) => slot.endsWith(":00") || slot.endsWith(":30"))
+    .map(({ index }) => index);
 
-  const x = (index) => padding.left + (index / Math.max(points.length - 1, 1)) * innerWidth;
+  const x = (index) => padding.left + (index / Math.max(slots.length - 1, 1)) * innerWidth;
   const y = (value) => padding.top + innerHeight - (value / maxQueue) * innerHeight;
+  const pathFor = (series) =>
+    series
+      .map((point, index) => `${index === 0 ? "M" : "L"} ${x(index).toFixed(1)} ${y(point.queueLengthMeters ?? 0).toFixed(1)}`)
+      .join(" ");
 
-  const linePath = points
-    .map((point, index) => `${index === 0 ? "M" : "L"} ${x(index).toFixed(1)} ${y(point.queueLengthMeters ?? 0).toFixed(1)}`)
-    .join(" ");
-
+  const todayPath = pathFor(todaySeries);
+  const yesterdayPath = pathFor(yesterdaySeries);
+  const averagePath = pathFor(averageSeries);
   const areaPath =
-    `${linePath} L ${x(points.length - 1).toFixed(1)} ${height - padding.bottom} ` +
+    `${todayPath} L ${x(slots.length - 1).toFixed(1)} ${height - padding.bottom} ` +
     `L ${x(0).toFixed(1)} ${height - padding.bottom} Z`;
 
   const gridLines = [...new Set(tickValues.filter((value) => value > 0))]
@@ -390,14 +406,26 @@ function renderQueueChart(route) {
   const labels = labelIndexes
     .map((index) => `
       <text x="${x(index)}" y="${height - 8}" text-anchor="middle" fill="rgba(150,168,189,0.9)" font-size="11">
-        ${displayTime(points[index].ts)}
+        ${slots[index]}
       </text>
     `)
     .join("");
 
-  const emptyState = actualMaxQueue === 0
-    ? `<text x="${padding.left}" y="${padding.top - 6}" fill="rgba(150,168,189,0.72)" font-size="11">Flat trend siste målinger</text>`
-    : "";
+  const emptyState =
+    actualMaxQueue === 0
+      ? `<text x="${padding.left}" y="${padding.top - 8}" fill="rgba(150,168,189,0.72)" font-size="11">14:00–17:00 uten tydelig kø</text>`
+      : "";
+
+  const legend = `
+    <g transform="translate(${padding.left}, 10)">
+      <line x1="0" y1="0" x2="18" y2="0" stroke="rgba(130,152,179,0.72)" stroke-width="2" stroke-dasharray="6 6"></line>
+      <text x="24" y="4" fill="rgba(150,168,189,0.88)" font-size="11">Historisk snitt</text>
+      <line x1="148" y1="0" x2="166" y2="0" stroke="rgba(127,191,255,0.55)" stroke-width="2"></line>
+      <text x="172" y="4" fill="rgba(150,168,189,0.88)" font-size="11">Gårsdag</text>
+      <line x1="252" y1="0" x2="270" y2="0" stroke="#ffb84d" stroke-width="3"></line>
+      <text x="276" y="4" fill="rgba(240,247,255,0.92)" font-size="11">I dag</text>
+    </g>
+  `;
 
   svg.innerHTML = `
     <defs>
@@ -406,14 +434,21 @@ function renderQueueChart(route) {
         <stop offset="100%" stop-color="rgba(255,184,77,0.02)" />
       </linearGradient>
     </defs>
+    ${legend}
     <line x1="${padding.left}" y1="${y(0)}" x2="${width - padding.right}" y2="${y(0)}" stroke="rgba(255,255,255,0.08)" />
     ${gridLines}
     ${emptyState}
     <path d="${areaPath}" fill="url(#queueArea)"></path>
-    <path d="${linePath}" fill="none" stroke="#ffb84d" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"></path>
-    ${points.map((point, index) => `
-      <circle cx="${x(index)}" cy="${y(point.queueLengthMeters ?? 0)}" r="4" fill="#08111a" stroke="#54d5ff" stroke-width="2"></circle>
-    `).join("")}
+    <path d="${averagePath}" fill="none" stroke="rgba(130,152,179,0.72)" stroke-width="2" stroke-dasharray="6 6" stroke-linejoin="round" stroke-linecap="round"></path>
+    <path d="${yesterdayPath}" fill="none" stroke="rgba(127,191,255,0.55)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></path>
+    <path d="${todayPath}" fill="none" stroke="#ffb84d" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"></path>
+    ${todaySeries
+      .map(
+        (point, index) => `
+      <circle cx="${x(index)}" cy="${y(point.queueLengthMeters ?? 0)}" r="3.5" fill="#08111a" stroke="#54d5ff" stroke-width="2"></circle>
+    `,
+      )
+      .join("")}
     ${labels}
   `;
 }
@@ -427,7 +462,7 @@ function heatColor(value) {
 }
 
 function renderHeatmap(route) {
-  const days = ["Man", "Tir", "Ons", "Tor", "Fre", "Lør", "Søn"];
+  const days = state.payload?.weekdayLabels ?? ["Man", "Tir", "Ons", "Tor", "Fre"];
   const container = elements.weekdayHeatmap;
   container.innerHTML = "";
 
@@ -439,7 +474,7 @@ function renderHeatmap(route) {
     container.appendChild(el);
   });
 
-  route.weekdayProfile.forEach((row) => {
+  (route.weekdayProfile ?? []).forEach((row) => {
     const label = document.createElement("div");
     label.className = "heatmap-row-label";
     label.textContent = row.time;
@@ -480,13 +515,13 @@ function applyView() {
     document.body.classList.add("summary-mode");
     document.body.classList.remove("route-mode");
     elements.routeSubtitle.textContent = "Oversikt over fire ruter fra Kokstad, med estimering nå og frem i tid.";
-    elements.updatedValue.textContent = formatTime(state.payload.updatedAt);
+    elements.updatedValue.textContent = state.payload.updatedAt ? formatTime(state.payload.updatedAt) : "Laster";
     renderSummary(state.payload);
     return;
   }
 
   const route = state.payload.routes.find((item) => item.id === state.activeTab) ?? state.payload.routes[0];
-  if (!route) {
+  if (!route || !route.current) {
     return;
   }
 
@@ -503,6 +538,10 @@ function applyView() {
 async function loadDashboard() {
   const response = await fetch(DATA_URL, { cache: "no-store" });
   const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.detail ?? data.error ?? "Ukjent feil");
+  }
 
   state.payload = data;
   if (state.activeTab !== "summary" && !data.routes.some((route) => route.id === state.activeTab)) {
