@@ -1,9 +1,6 @@
 const DATA_URL = "https://hfhjbbzbuzebilfuydtm.supabase.co/functions/v1/clever-api";
 const ACTIVE_TAB_STORAGE_KEY = "kokstadDashboardActiveTab";
-const RUSH_REFRESH_START_MINUTES = 14 * 60 + 30;
-const RUSH_REFRESH_END_MINUTES = 16 * 60 + 30;
-const FAST_REFRESH_INTERVAL_MS = 2 * 60 * 1000;
-const DEFAULT_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const ONE_MINUTE_MS = 60 * 1000;
 
 const state = {
   payload: null,
@@ -134,13 +131,52 @@ function setStoredActiveTab(tabId) {
   }
 }
 
-function getRefreshIntervalMs(now = new Date()) {
-  const totalMinutes = now.getHours() * 60 + now.getMinutes();
-  const isRushWindow =
-    totalMinutes >= RUSH_REFRESH_START_MINUTES &&
-    totalMinutes <= RUSH_REFRESH_END_MINUTES;
+function isActiveRefreshMinute(date) {
+  const day = date.getDay();
+  const isWeekend = day === 0 || day === 6;
+  if (isWeekend) {
+    return false;
+  }
 
-  return isRushWindow ? FAST_REFRESH_INTERVAL_MS : DEFAULT_REFRESH_INTERVAL_MS;
+  const totalMinutes = date.getHours() * 60 + date.getMinutes();
+  const minute = date.getMinutes();
+
+  if (totalMinutes < 8 * 60 || totalMinutes > 17 * 60) {
+    return false;
+  }
+
+  if (totalMinutes < 12 * 60) {
+    return minute === 0;
+  }
+
+  if (totalMinutes < 14 * 60) {
+    return minute % 10 === 0;
+  }
+
+  if (totalMinutes < 14 * 60 + 30) {
+    return minute % 5 === 0;
+  }
+
+  if (totalMinutes < 16 * 60 + 30) {
+    return minute % 2 === 0;
+  }
+
+  return minute % 5 === 0;
+}
+
+function getRefreshDelayMs(now = new Date()) {
+  const next = new Date(now);
+  next.setSeconds(0, 0);
+  next.setMinutes(next.getMinutes() + 1);
+
+  for (let i = 0; i < 8 * 24 * 60; i += 1) {
+    if (isActiveRefreshMinute(next)) {
+      return Math.max(next.getTime() - now.getTime(), ONE_MINUTE_MS);
+    }
+    next.setMinutes(next.getMinutes() + 1);
+  }
+
+  return 12 * 60 * ONE_MINUTE_MS;
 }
 
 function severityInfo(delaySec, thresholds = { lightDelaySec: 120, queueDelaySec: 300, majorDelaySec: 900 }) {
@@ -154,6 +190,32 @@ function severityInfo(delaySec, thresholds = { lightDelaySec: 120, queueDelaySec
     return { label: "Litt kø", color: "#ffd36e" };
   }
   return { label: "Flyt i trafikken", color: "#5fd497" };
+}
+
+function summaryTrendScore(snapshot) {
+  if (!snapshot) {
+    return 0;
+  }
+
+  return (snapshot.delaySec ?? 0) * 2 + (snapshot.queueLengthMeters ?? 0);
+}
+
+function getSummaryTrend(baseSnapshot, targetSnapshot) {
+  if (!baseSnapshot || !targetSnapshot) {
+    return null;
+  }
+
+  const delta = summaryTrendScore(targetSnapshot) - summaryTrendScore(baseSnapshot);
+
+  if (Math.abs(delta) < 45) {
+    return { icon: "&#8594;", label: "Stabil", className: "flat" };
+  }
+
+  if (delta > 0) {
+    return { icon: "&#8599;", label: "Opp", className: "up" };
+  }
+
+  return { icon: "&#8600;", label: "Ned", className: "down" };
 }
 
 function renderTabs(payload) {
@@ -180,11 +242,13 @@ function renderTabs(payload) {
   });
 }
 
-function renderSummarySlot(label, snapshot, thresholds) {
+function renderSummarySlot(label, snapshot, thresholds, trend = null) {
   if (!snapshot) {
     return `
       <div class="summary-slot">
-        <span class="summary-slot-label">${label}</span>
+        <div class="summary-slot-topline">
+          <span class="summary-slot-label">${label}</span>
+        </div>
         <strong>--</strong>
         <span class="summary-slot-meta">Ikke tilgjengelig</span>
       </div>
@@ -192,10 +256,21 @@ function renderSummarySlot(label, snapshot, thresholds) {
   }
 
   const info = severityInfo(snapshot.delaySec, thresholds);
+  const trendMarkup = trend
+    ? `
+      <span class="summary-trend trend-${trend.className}">
+        <span class="summary-trend-icon">${trend.icon}</span>
+        ${trend.label}
+      </span>
+    `
+    : "";
 
   return `
     <div class="summary-slot">
-      <span class="summary-slot-label">${label}</span>
+      <div class="summary-slot-topline">
+        <span class="summary-slot-label">${label}</span>
+        ${trendMarkup}
+      </div>
       <strong>${formatMeters(snapshot.queueLengthMeters)}</strong>
       <span class="summary-slot-meta">${formatMinutesFromSeconds(snapshot.delaySec)} forsinkelse</span>
       <span class="summary-pill" style="color:${info.color};background:${info.color}1e;border-color:${info.color}33;">${info.label}</span>
@@ -205,8 +280,12 @@ function renderSummarySlot(label, snapshot, thresholds) {
 
 function renderSummary(payload) {
   elements.summaryGrid.innerHTML = (payload.summary ?? [])
-    .map((item) => `
-      <article class="summary-card">
+    .map((item) => {
+      const trendTo30 = getSummaryTrend(item.now, item.plus30);
+      const trendTo60 = getSummaryTrend(item.plus30 ?? item.now, item.plus60);
+
+      return `
+        <article class="summary-card">
         <div class="summary-card-head">
           <div>
             <h4>${item.label}</h4>
@@ -216,11 +295,12 @@ function renderSummary(payload) {
         </div>
         <div class="summary-slots">
           ${renderSummarySlot("Nå", item.now, item.thresholds)}
-          ${renderSummarySlot("+30 min", item.plus30, item.thresholds)}
-          ${renderSummarySlot("+1 time", item.plus60, item.thresholds)}
+          ${renderSummarySlot("+30 min", item.plus30, item.thresholds, trendTo30)}
+          ${renderSummarySlot("+1 time", item.plus60, item.thresholds, trendTo60)}
         </div>
       </article>
-    `)
+      `;
+    })
     .join("");
 }
 
@@ -434,7 +514,7 @@ async function loadDashboard() {
 }
 
 function scheduleDashboardPolling() {
-  const delay = getRefreshIntervalMs();
+  const delay = getRefreshDelayMs();
 
   window.setTimeout(() => {
     loadDashboard()
@@ -445,18 +525,9 @@ function scheduleDashboardPolling() {
   }, delay);
 }
 
-function schedulePageRefresh() {
-  const delay = getRefreshIntervalMs();
-
-  window.setTimeout(() => {
-    window.location.reload();
-  }, delay);
-}
-
 setClock();
 setInterval(setClock, 1000);
 scheduleDashboardPolling();
-schedulePageRefresh();
 
 loadDashboard().catch((error) => {
   elements.routeSubtitle.textContent = `Kunne ikke laste dashboard-data: ${error.message}`;
