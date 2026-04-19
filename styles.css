@@ -642,3 +642,235 @@ body.route-mode .summary-only {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
+
+@media (max-width: 900px) {
+  html,
+  body {
+    height: auto;
+    min-height: 100%;
+    overflow: auto;
+  }
+
+  body::before {
+    background-size: 32px 32px;
+  }
+
+  .app-shell {
+    width: 100%;
+    height: auto;
+    min-height: 100vh;
+    padding: 14px 12px 28px;
+  }
+
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  h1 {
+    font-size: clamp(2.2rem, 10vw, 3.3rem);
+    line-height: 0.95;
+  }
+
+  .subtitle {
+    font-size: 0.86rem;
+    line-height: 1.35;
+  }
+
+  .topbar-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .clock-card {
+    min-width: 0;
+    padding: 10px 12px;
+  }
+
+  .route-tabs {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .route-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .route-tab {
+    flex: 0 0 auto;
+    padding: 8px 12px;
+    font-size: 0.8rem;
+  }
+
+  .dashboard-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .panel {
+    padding: 14px 12px;
+  }
+
+  .panel-summary,
+  .panel-hero,
+  .panel-today,
+  .panel-chart,
+  .panel-heatmap,
+  .panel-wide {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .summary-grid,
+  .forecast-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-slots {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-hero {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .hero-copy h2 {
+    font-size: clamp(2.4rem, 18vw, 4rem);
+  }
+
+  .hero-summary {
+    max-width: none;
+    margin-bottom: 10px;
+  }
+
+  .hero-kpis,
+  .stat-grid,
+  .forecast-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .route-strip {
+    min-height: 48px;
+  }
+
+  .route-legend,
+  .route-labels,
+  .route-header,
+  .panel-head,
+  .forecast-head {
+    gap: 8px;
+  }
+
+  .panel-head,
+  .forecast-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .chart {
+    min-height: 210px;
+  }
+
+  .panel-heatmap {
+    overflow-x: auto;
+  }
+
+  .heatmap {
+    min-width: 720px;
+  }
+}
+
+@media (max-width: 1100px), (pointer: coarse) and (orientation: portrait) {
+  .app-shell {
+    width: 100%;
+    height: auto;
+    min-height: 100vh;
+    padding: 16px 14px 30px;
+  }
+
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+
+  .topbar-meta {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .clock-card {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .route-tabs {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+
+  .route-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .route-tab {
+    flex: 0 0 auto;
+  }
+
+  .summary-grid,
+  .forecast-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-card {
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .summary-card-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .summary-card-head h4 {
+    font-size: 1rem;
+  }
+
+  .summary-card-head p,
+  .summary-updated {
+    font-size: 0.78rem;
+  }
+
+  .summary-slots {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .summary-slot {
+    padding: 11px 11px 10px;
+  }
+
+  .summary-slot strong {
+    font-size: 1.3rem;
+  }
+
+  .summary-slot-meta {
+    font-size: 0.74rem;
+  }
+
+  .summary-trend {
+    font-size: 0.64rem;
+    padding: 3px 7px;
+  }
+}

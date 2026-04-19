@@ -129,28 +129,21 @@ function isActiveRefreshMinute(date) {
 
   const totalMinutes = date.getHours() * 60 + date.getMinutes();
   const minute = date.getMinutes();
+  const isFriday = day === 5;
 
-  if (totalMinutes < 8 * 60 || totalMinutes >= 17 * 60) {
+  if (isFriday) {
+    if (totalMinutes < 13 * 60 || totalMinutes > 16 * 60 + 30) {
+      return false;
+    }
+
+    return minute % 5 === 0;
+  }
+
+  if (totalMinutes < 14 * 60 + 30 || totalMinutes > 16 * 60 + 30) {
     return false;
   }
 
-  if (totalMinutes < 12 * 60) {
-    return minute === 0;
-  }
-
-  if (totalMinutes < 14 * 60) {
-    return minute % 15 === 0;
-  }
-
-  if (totalMinutes < 14 * 60 + 30) {
-    return minute % 10 === 0;
-  }
-
-  if (totalMinutes < 16 * 60 + 30) {
-    return minute % 3 === 0;
-  }
-
-  return minute % 10 === 0;
+  return minute % 5 === 0;
 }
 
 function getRefreshDelayMs(now = new Date()) {
@@ -405,10 +398,15 @@ function renderQueueChart(route) {
     return;
   }
 
+  const hasMetric = (point) => point && point.queueLengthMeters != null;
+  const validPoints = (series) =>
+    series.flatMap((point, index) =>
+      hasMetric(point) ? [{ index, value: point.queueLengthMeters }] : [],
+    );
   const allValues = [
-    ...todaySeries.map((item) => item.queueLengthMeters ?? 0),
-    ...yesterdaySeries.map((item) => item.queueLengthMeters ?? 0),
-    ...averageSeries.map((item) => item.queueLengthMeters ?? 0),
+    ...todaySeries.filter(hasMetric).map((item) => item.queueLengthMeters),
+    ...yesterdaySeries.filter(hasMetric).map((item) => item.queueLengthMeters),
+    ...averageSeries.filter(hasMetric).map((item) => item.queueLengthMeters),
   ];
 
   const actualMaxQueue = Math.max(...allValues, 0);
@@ -424,17 +422,26 @@ function renderQueueChart(route) {
 
   const x = (index) => padding.left + (index / Math.max(slots.length - 1, 1)) * innerWidth;
   const y = (value) => padding.top + innerHeight - (value / maxQueue) * innerHeight;
-  const pathFor = (series) =>
-    series
-      .map((point, index) => `${index === 0 ? "M" : "L"} ${x(index).toFixed(1)} ${y(point.queueLengthMeters ?? 0).toFixed(1)}`)
+  const pathFor = (series) => {
+    const points = validPoints(series);
+    if (!points.length) {
+      return "";
+    }
+
+    return points
+      .map((point, index) => `${index === 0 ? "M" : "L"} ${x(point.index).toFixed(1)} ${y(point.value).toFixed(1)}`)
       .join(" ");
+  };
 
   const todayPath = pathFor(todaySeries);
   const yesterdayPath = pathFor(yesterdaySeries);
   const averagePath = pathFor(averageSeries);
+  const todayPoints = validPoints(todaySeries);
   const areaPath =
-    `${todayPath} L ${x(slots.length - 1).toFixed(1)} ${height - padding.bottom} ` +
-    `L ${x(0).toFixed(1)} ${height - padding.bottom} Z`;
+    todayPoints.length >= 2
+      ? `${todayPath} L ${x(todayPoints[todayPoints.length - 1].index).toFixed(1)} ${height - padding.bottom} ` +
+        `L ${x(todayPoints[0].index).toFixed(1)} ${height - padding.bottom} Z`
+      : "";
 
   const gridLines = [...new Set(tickValues.filter((value) => value > 0))]
     .map((value) => {
@@ -471,29 +478,29 @@ function renderQueueChart(route) {
   `;
 
   svg.innerHTML = `
-    <defs>
-      <linearGradient id="queueArea" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="rgba(255,184,77,0.36)" />
-        <stop offset="100%" stop-color="rgba(255,184,77,0.02)" />
-      </linearGradient>
-    </defs>
-    ${legend}
-    <line x1="${padding.left}" y1="${y(0)}" x2="${width - padding.right}" y2="${y(0)}" stroke="rgba(255,255,255,0.08)" />
-    ${gridLines}
-    ${emptyState}
-    <path d="${areaPath}" fill="url(#queueArea)"></path>
-    <path d="${averagePath}" fill="none" stroke="rgba(130,152,179,0.72)" stroke-width="2" stroke-dasharray="6 6" stroke-linejoin="round" stroke-linecap="round"></path>
-    <path d="${yesterdayPath}" fill="none" stroke="rgba(127,191,255,0.55)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></path>
-    <path d="${todayPath}" fill="none" stroke="#ffb84d" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"></path>
-    ${todaySeries
-      .map(
-        (point, index) => `
-      <circle cx="${x(index)}" cy="${y(point.queueLengthMeters ?? 0)}" r="3.5" fill="#08111a" stroke="#54d5ff" stroke-width="2"></circle>
+      <defs>
+        <linearGradient id="queueArea" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="rgba(255,184,77,0.36)" />
+          <stop offset="100%" stop-color="rgba(255,184,77,0.02)" />
+        </linearGradient>
+      </defs>
+      ${legend}
+      <line x1="${padding.left}" y1="${y(0)}" x2="${width - padding.right}" y2="${y(0)}" stroke="rgba(255,255,255,0.08)" />
+      ${gridLines}
+      ${emptyState}
+      ${areaPath ? `<path d="${areaPath}" fill="url(#queueArea)"></path>` : ""}
+      ${averagePath ? `<path d="${averagePath}" fill="none" stroke="rgba(130,152,179,0.72)" stroke-width="2" stroke-dasharray="6 6" stroke-linejoin="round" stroke-linecap="round"></path>` : ""}
+      ${yesterdayPath ? `<path d="${yesterdayPath}" fill="none" stroke="rgba(127,191,255,0.55)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></path>` : ""}
+      ${todayPath ? `<path d="${todayPath}" fill="none" stroke="#ffb84d" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"></path>` : ""}
+      ${todayPoints
+        .map(
+          (point) => `
+      <circle cx="${x(point.index)}" cy="${y(point.value)}" r="3.5" fill="#08111a" stroke="#54d5ff" stroke-width="2"></circle>
     `,
-      )
-      .join("")}
-    ${labels}
-  `;
+        )
+        .join("")}
+      ${labels}
+    `;
 }
 
 function heatColor(value) {
