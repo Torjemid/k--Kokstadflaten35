@@ -1,6 +1,7 @@
 const DATA_URL = "https://hfhjbbzbuzebilfuydtm.supabase.co/functions/v1/clever-api";
 const ACTIVE_TAB_STORAGE_KEY = "kokstadDashboardActiveTab";
 const ONE_MINUTE_MS = 60 * 1000;
+const EVENING_ROLLOVER_MINUTES = 18 * 60;
 
 const state = {
   payload: null,
@@ -10,45 +11,33 @@ const state = {
 const elements = {
   routeSubtitle: document.getElementById("routeSubtitle"),
   routeTabs: document.getElementById("routeTabs"),
-  summaryGrid: document.getElementById("summaryGrid"),
   clockValue: document.getElementById("clockValue"),
   updatedValue: document.getElementById("updatedValue"),
-  severityPill: document.getElementById("severityPill"),
-  heroDelay: document.getElementById("heroDelay"),
-  heroSummary: document.getElementById("heroSummary"),
+  queueLengthLabel: document.getElementById("queueLengthLabel"),
   queueLengthValue: document.getElementById("queueLengthValue"),
+  liveDurationLabel: document.getElementById("liveDurationLabel"),
+  liveDurationNote: document.getElementById("liveDurationNote"),
+  heroDelay: document.getElementById("heroDelay"),
   liveDurationValue: document.getElementById("liveDurationValue"),
   freeFlowValue: document.getElementById("freeFlowValue"),
-  distanceValue: document.getElementById("distanceValue"),
-  routeStrip: document.getElementById("routeStrip"),
-  routeLegend: document.getElementById("routeLegend"),
-  originLabelValue: document.getElementById("originLabelValue"),
-  destinationLabelValue: document.getElementById("destinationLabelValue"),
-  queueStartValue: document.getElementById("queueStartValue"),
-  queueEndValue: document.getElementById("queueEndValue"),
-  queueDurationValue: document.getElementById("queueDurationValue"),
-  peakDelayValue: document.getElementById("peakDelayValue"),
+  severityLabel: document.getElementById("severityLabel"),
+  statusSentence: document.getElementById("statusSentence"),
+  chartTitle: document.getElementById("chartTitle"),
+  chartSubtitle: document.getElementById("chartSubtitle"),
   delayChart: document.getElementById("delayChart"),
-  weekdayHeatmap: document.getElementById("weekdayHeatmap"),
-  yesterdayStartValue: document.getElementById("yesterdayStartValue"),
-  yesterdayEndValue: document.getElementById("yesterdayEndValue"),
-  yesterdayDurationValue: document.getElementById("yesterdayDurationValue"),
-  yesterdayPeakValue: document.getElementById("yesterdayPeakValue"),
-  forecastTodayStartValue: document.getElementById("forecastTodayStartValue"),
-  forecastTodayEndValue: document.getElementById("forecastTodayEndValue"),
-  forecastTodayDurationValue: document.getElementById("forecastTodayDurationValue"),
-  forecastTodayPeakValue: document.getElementById("forecastTodayPeakValue"),
-  forecastTomorrowStartValue: document.getElementById("forecastTomorrowStartValue"),
-  forecastTomorrowEndValue: document.getElementById("forecastTomorrowEndValue"),
-  forecastTomorrowDurationValue: document.getElementById("forecastTomorrowDurationValue"),
-  forecastTomorrowPeakValue: document.getElementById("forecastTomorrowPeakValue"),
+  actualLegendLabel: document.getElementById("actualLegendLabel"),
+  expectedLegendLabel: document.getElementById("expectedLegendLabel"),
+  historyLegendLabel: document.getElementById("historyLegendLabel"),
+  expectedPeakTimeValue: document.getElementById("expectedPeakTimeValue"),
+  expectedPeakLengthValue: document.getElementById("expectedPeakLengthValue"),
+  expectedPeriodValue: document.getElementById("expectedPeriodValue"),
 };
 
 function getStoredActiveTab() {
   try {
-    return window.localStorage.getItem(ACTIVE_TAB_STORAGE_KEY) ?? "summary";
+    return window.localStorage.getItem(ACTIVE_TAB_STORAGE_KEY) ?? null;
   } catch {
-    return "summary";
+    return null;
   }
 }
 
@@ -56,69 +45,247 @@ function setStoredActiveTab(tabId) {
   try {
     window.localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tabId);
   } catch {
-    // Ignore storage failures on locked-down kiosk devices.
+    // Some kiosk browsers lock down local storage.
   }
 }
 
-function formatTime(value) {
+function coalesce(...values) {
+  return values.find((value) => value !== undefined && value !== null);
+}
+
+function validDate(value) {
+  if (!value) {
+    return null;
+  }
+
   const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function localDayStart(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function calendarDayDelta(fromDate, toDate = new Date()) {
+  const from = localDayStart(fromDate);
+  const to = localDayStart(toDate);
+  return Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+function minutesSinceMidnight(date) {
+  return date.getHours() * 60 + date.getMinutes();
+}
+
+function getRouteUpdatedDate(route) {
+  return validDate(route?.updatedAt ?? state.payload?.updatedAt);
+}
+
+function getDashboardDayContext(route, now = new Date()) {
+  const updatedDate = getRouteUpdatedDate(route);
+  const dataAgeDays = updatedDate ? calendarDayDelta(updatedDate, now) : null;
+  const isSameDay = dataAgeDays === 0;
+  const isEvening = minutesSinceMidnight(now) >= EVENING_ROLLOVER_MINUTES;
+  const isLiveNow = isSameDay && !isEvening;
+
+  let actualLabel = "Siste målte kø";
+  if (isSameDay) {
+    actualLabel = "Kø i dag";
+  } else if (dataAgeDays === 1) {
+    actualLabel = "Kø i går";
+  }
+
+  return {
+    updatedDate,
+    dataAgeDays,
+    isSameDay,
+    isEvening,
+    isLiveNow,
+    actualLabel,
+    expectedLabel: "Forventet i dag",
+    historyLabel: "Historisk snitt",
+    markerLabel: isLiveNow ? "Nå" : "Sist",
+    showMarker: isSameDay && Boolean(updatedDate),
+  };
+}
+
+function normalizeSnapshot(snapshot) {
+  if (!snapshot) {
+    return null;
+  }
+
+  return {
+    ...snapshot,
+    durationSec: coalesce(snapshot.durationSec, snapshot.duration_sec),
+    staticDurationSec: coalesce(snapshot.staticDurationSec, snapshot.static_duration_sec),
+    delaySec: coalesce(snapshot.delaySec, snapshot.delay_sec),
+    queueLengthMeters: coalesce(snapshot.queueLengthMeters, snapshot.queue_length_m),
+    trafficSeverity: coalesce(snapshot.trafficSeverity, snapshot.traffic_severity),
+  };
+}
+
+function normalizeRoutes(payload) {
+  const routes = Array.isArray(payload?.routes) ? payload.routes : [];
+
+  if (routes.length) {
+    return routes.map((route, index) => ({
+      ...route,
+      id: route.id ?? `route-${index}`,
+      tabLabel: route.tabLabel ?? route.label ?? route.destinationLabel ?? `Rute ${index + 1}`,
+      subtitle: route.subtitle ?? `Odfjell Drilling → ${route.destinationLabel ?? "Kokstadvegen"}`,
+      current: normalizeSnapshot(route.current),
+      updatedAt: route.updatedAt ?? payload.updatedAt,
+      queueChart: route.queueChart ?? payload.queueChart,
+      forecastToday: route.forecastToday ?? payload.forecastToday,
+      today: route.today ?? payload.today,
+      yesterday: route.yesterday ?? payload.yesterday,
+    }));
+  }
+
+  return [
+    {
+      id: "kokstadvegen",
+      tabLabel: "Kokstadvegen",
+      subtitle: "Odfjell Drilling → Kokstadvegen",
+      current: normalizeSnapshot(payload?.current),
+      updatedAt: payload?.updatedAt,
+      queueChart: payload?.queueChart,
+      forecastToday: payload?.forecastToday,
+      today: payload?.today,
+      yesterday: payload?.yesterday,
+    },
+  ];
+}
+
+function formatClock(value) {
   return new Intl.DateTimeFormat("nb-NO", {
     hour: "2-digit",
     minute: "2-digit",
-  }).format(date);
+  }).format(value);
 }
 
-function displayTime(value) {
+function formatTime(value) {
   if (!value) {
     return "--";
   }
-  return value.includes("T") ? formatTime(value) : value;
-}
 
-function formatMinutesFromSeconds(seconds) {
-  return `${Math.round((seconds ?? 0) / 60)} min`;
-}
-
-function formatMinutes(value) {
-  return `${Math.round(value ?? 0)} min`;
-}
-
-function formatMeters(meters) {
-  if ((meters ?? 0) >= 1000) {
-    return `${((meters ?? 0) / 1000).toFixed(2).replace(".", ",")} km`;
+  if (typeof value === "string" && !value.includes("T")) {
+    return value;
   }
-  return `${Math.round(meters ?? 0)} m`;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "--";
+  }
+
+  return formatClock(date);
+}
+
+function formatMinutesFromSeconds(seconds, fallback = "-- min") {
+  if (seconds === undefined || seconds === null || Number.isNaN(Number(seconds))) {
+    return fallback;
+  }
+
+  return `${Math.round(Number(seconds) / 60)} min`;
+}
+
+function formatDelay(seconds) {
+  if (seconds === undefined || seconds === null || Number.isNaN(Number(seconds))) {
+    return "-- min";
+  }
+
+  const minutes = Math.round(Math.max(0, Number(seconds)) / 60);
+  return minutes > 0 ? `+${minutes} min` : "0 min";
+}
+
+function formatMeters(meters, fallback = "-- m") {
+  if (meters === undefined || meters === null || Number.isNaN(Number(meters))) {
+    return fallback;
+  }
+
+  const value = Math.max(0, Number(meters));
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(1).replace(".", ",")} km`;
+  }
+
+  return `${Math.round(value / 10) * 10} m`;
 }
 
 function formatAxisMeters(meters) {
-  if ((meters ?? 0) >= 1000) {
-    return `${((meters ?? 0) / 1000).toFixed(1).replace(".", ",")} km`;
+  if (meters >= 1000) {
+    return `${(meters / 1000).toFixed(1).replace(".", ",")} km`;
   }
-  return `${Math.round(meters ?? 0)} m`;
+
+  return `${Math.round(meters)} m`;
 }
 
 function niceQueueStep(maxValue) {
-  if (maxValue <= 40) {
-    return 10;
+  if (maxValue <= 100) {
+    return 25;
   }
-  if (maxValue <= 120) {
-    return 20;
+  if (maxValue <= 250) {
+    return 50;
   }
-  if (maxValue <= 240) {
-    return 40;
-  }
-  if (maxValue <= 500) {
+  if (maxValue <= 600) {
     return 100;
   }
-  return 200;
+  if (maxValue <= 1200) {
+    return 200;
+  }
+  return 500;
+}
+
+function severityInfo(snapshot, thresholds = {}) {
+  const delaySec = Number(snapshot?.delaySec ?? 0);
+  const queueMeters = Number(snapshot?.queueLengthMeters ?? 0);
+  const severity = String(snapshot?.trafficSeverity ?? "").toUpperCase();
+  const light = thresholds.lightDelaySec ?? 60;
+  const queue = thresholds.queueDelaySec ?? 300;
+  const major = thresholds.majorDelaySec ?? 900;
+
+  if (severity.includes("MAJOR") || delaySec >= major || queueMeters >= 900) {
+    return { key: "MAJOR_QUEUE", label: "Mye kø nå" };
+  }
+  if (severity === "QUEUE" || delaySec >= queue || queueMeters >= 350) {
+    return { key: "QUEUE", label: "Kø nå" };
+  }
+  if (severity.includes("LIGHT") || delaySec > light || queueMeters > 0) {
+    return { key: "LIGHT_QUEUE", label: "Lett kø nå" };
+  }
+
+  return { key: "NORMAL", label: queueMeters > 0 ? "Flyter fint nå" : "Ingen kø nå" };
+}
+
+function buildStatusSentence(snapshot, thresholds, context) {
+  if (!snapshot) {
+    return "Venter på data.";
+  }
+
+  const queueMeters = Number(snapshot.queueLengthMeters ?? 0);
+  const durationText = formatMinutesFromSeconds(snapshot.durationSec);
+  const normalText = formatMinutesFromSeconds(snapshot.staticDurationSec);
+  const info = severityInfo(snapshot, thresholds);
+
+  if (!context?.isSameDay) {
+    const measuredWhen = context?.dataAgeDays === 1 ? "i går" : "sist";
+    return `Neste live-måling starter i ettermiddag. Grafen viser ${context?.actualLabel.toLowerCase() ?? "siste målte kø"} og forventet kø i dag. Sist målt ${measuredWhen}: ${formatMeters(queueMeters)} kø og ${durationText} reisetid.`;
+  }
+
+  if (context?.isEvening) {
+    return `Dagens live-målinger er ferdige. Sist målt kl. ${formatTime(context.updatedDate)}: ${formatMeters(queueMeters)} kø og ${durationText} reisetid.`;
+  }
+
+  const parts = [info.label + "."];
+  parts.push(`Reisetiden er ${durationText}${normalText !== "-- min" ? `, normalt ${normalText}` : ""}.`);
+
+  if (queueMeters > 0) {
+    parts.push(`Estimert kø: ${formatMeters(queueMeters).replace(" m", " meter").replace(" km", " km")}.`);
+  }
+
+  return parts.join(" ");
 }
 
 function setClock() {
-  elements.clockValue.textContent = new Intl.DateTimeFormat("nb-NO", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).format(new Date());
+  elements.clockValue.textContent = formatClock(new Date());
 }
 
 function isActiveRefreshMinute(date) {
@@ -132,18 +299,10 @@ function isActiveRefreshMinute(date) {
   const isFriday = day === 5;
 
   if (isFriday) {
-    if (totalMinutes < 13 * 60 || totalMinutes > 16 * 60 + 30) {
-      return false;
-    }
-
-    return minute % 5 === 0;
+    return totalMinutes >= 13 * 60 && totalMinutes <= 16 * 60 + 30 && minute % 5 === 0;
   }
 
-  if (totalMinutes < 14 * 60 + 30 || totalMinutes > 16 * 60 + 30) {
-    return false;
-  }
-
-  return minute % 5 === 0;
+  return totalMinutes >= 14 * 60 + 30 && totalMinutes <= 16 * 60 + 30 && minute % 5 === 0;
 }
 
 function getRefreshDelayMs(now = new Date()) {
@@ -161,411 +320,306 @@ function getRefreshDelayMs(now = new Date()) {
   return 12 * 60 * ONE_MINUTE_MS;
 }
 
-function severityInfo(delaySec, thresholds = { lightDelaySec: 120, queueDelaySec: 300, majorDelaySec: 900 }) {
-  if (delaySec >= thresholds.majorDelaySec) {
-    return { label: "Betydelig kø", color: "#ff6b5f" };
-  }
-  if (delaySec >= thresholds.queueDelaySec) {
-    return { label: "Kø", color: "#ffb84d" };
-  }
-  if (delaySec >= thresholds.lightDelaySec) {
-    return { label: "Litt kø", color: "#ffd36e" };
-  }
-  return { label: "Flyt i trafikken", color: "#5fd497" };
-}
-
-function summaryTrendScore(snapshot) {
-  if (!snapshot) {
-    return 0;
-  }
-
-  return (snapshot.delaySec ?? 0) * 2 + (snapshot.queueLengthMeters ?? 0);
-}
-
-function getSummaryTrend(baseSnapshot, targetSnapshot) {
-  if (!baseSnapshot || !targetSnapshot) {
+function getActiveRoute() {
+  const routes = normalizeRoutes(state.payload);
+  if (!routes.length) {
     return null;
   }
 
-  const delta = summaryTrendScore(targetSnapshot) - summaryTrendScore(baseSnapshot);
-
-  if (Math.abs(delta) < 45) {
-    return { icon: "→", label: "Stabil", className: "flat" };
-  }
-
-  if (delta > 0) {
-    return { icon: "↗", label: "Opp", className: "up" };
-  }
-
-  return { icon: "↘", label: "Ned", className: "down" };
+  const storedRoute = routes.find((route) => route.id === state.activeTab);
+  return storedRoute ?? routes[0];
 }
 
-function renderTabs(payload) {
-  const tabs = [
-    { id: "summary", label: "Summary" },
-    ...(payload.routes ?? []).map((route) => ({
-      id: route.id,
-      label: route.tabLabel,
-    })),
-  ];
+function renderHeader(route) {
+  if (!route) {
+    elements.routeSubtitle.textContent = "Odfjell Drilling → Kokstadvegen";
+    elements.updatedValue.textContent = "Venter";
+    return;
+  }
 
+  elements.routeSubtitle.textContent = route.subtitle ?? "Odfjell Drilling → Kokstadvegen";
+  elements.updatedValue.textContent = route.updatedAt ? formatTime(route.updatedAt) : "Venter";
+}
+
+function renderRouteTabs(payload) {
+  const routes = normalizeRoutes(payload);
   elements.routeTabs.innerHTML = "";
-  tabs.forEach((tab) => {
+
+  routes.forEach((route) => {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = `route-tab${state.activeTab === tab.id ? " active" : ""}`;
-    button.textContent = tab.label;
+    button.className = `route-tab${route.id === state.activeTab ? " active" : ""}`;
+    button.textContent = route.tabLabel;
+    button.setAttribute("aria-pressed", route.id === state.activeTab ? "true" : "false");
     button.addEventListener("click", () => {
-      state.activeTab = tab.id;
-      setStoredActiveTab(tab.id);
+      state.activeTab = route.id;
+      setStoredActiveTab(route.id);
       applyView();
     });
     elements.routeTabs.appendChild(button);
   });
 }
 
-function renderSummarySlot(label, snapshot, thresholds, trend = null) {
-  if (!snapshot) {
-    return `
-      <div class="summary-slot">
-        <div class="summary-slot-topline">
-          <span class="summary-slot-label">${label}</span>
-        </div>
-        <strong>--</strong>
-        <span class="summary-slot-meta">Ikke tilgjengelig</span>
-      </div>
-    `;
+function renderCurrentStatus(route) {
+  const snapshot = route?.current;
+  const thresholds = route?.thresholds ?? state.payload?.thresholds ?? {};
+  const info = severityInfo(snapshot, thresholds);
+  const context = getDashboardDayContext(route);
+  const isStale = snapshot && !context.isLiveNow;
+  const measuredSuffix = context.dataAgeDays === 1 ? "i går" : "sist målt";
+
+  elements.queueLengthLabel.textContent = isStale ? `Kø ${measuredSuffix}` : "Kø nå";
+  elements.liveDurationLabel.textContent = isStale ? `Reisetid ${measuredSuffix}` : "Reisetid nå";
+  elements.queueLengthValue.textContent = formatMeters(snapshot?.queueLengthMeters);
+  elements.heroDelay.textContent = formatDelay(snapshot?.delaySec);
+  elements.liveDurationValue.textContent = formatMinutesFromSeconds(snapshot?.durationSec);
+  elements.freeFlowValue.textContent = formatMinutesFromSeconds(snapshot?.staticDurationSec);
+  elements.severityLabel.textContent = snapshot
+    ? isStale
+      ? `Sist målt ${context.dataAgeDays === 1 ? "i går" : `kl. ${formatTime(context.updatedDate)}`}`
+      : info.label
+    : "Venter på data";
+  elements.statusSentence.textContent = buildStatusSentence(snapshot, thresholds, context);
+  document.body.dataset.severity = snapshot ? info.key : "UNKNOWN";
+}
+
+function normalizeSeriesPoint(point, index, slots) {
+  if (!point) {
+    return null;
   }
 
-  const info = severityInfo(snapshot.delaySec ?? 0, thresholds);
-  const trendMarkup = trend
-    ? `
-      <span class="summary-trend trend-${trend.className}">
-        <span class="summary-trend-icon">${trend.icon}</span>
-        ${trend.label}
-      </span>
-    `
-    : "";
+  const queueLengthMeters = coalesce(point.queueLengthMeters, point.queue_length_m);
+  const delaySec = coalesce(point.delaySec, point.delay_sec);
+  const timestamp = coalesce(point.ts, point.time, point.timestamp, slots?.[index]);
 
-  return `
-    <div class="summary-slot">
-      <div class="summary-slot-topline">
-        <span class="summary-slot-label">${label}</span>
-        ${trendMarkup}
-      </div>
-      <strong>${formatMeters(snapshot.queueLengthMeters ?? 0)}</strong>
-      <span class="summary-slot-meta">${formatMinutesFromSeconds(snapshot.delaySec ?? 0)} forsinkelse</span>
-      <span class="summary-pill" style="color:${info.color};background:${info.color}1e;border-color:${info.color}33;">${info.label}</span>
-    </div>
-  `;
-}
-
-function renderSummary(payload) {
-  elements.summaryGrid.innerHTML = (payload.summary ?? [])
-    .map((item) => {
-      const trendTo30 = getSummaryTrend(item.now, item.plus30);
-      const trendTo60 = getSummaryTrend(item.plus30 ?? item.now, item.plus60);
-
-      return `
-        <article class="summary-card">
-          <div class="summary-card-head">
-            <div>
-              <h4>${item.label}</h4>
-              <p>${item.title}</p>
-            </div>
-            <span class="summary-updated">${item.updatedAt ? displayTime(item.updatedAt) : "--"}</span>
-          </div>
-          <div class="summary-slots">
-            ${renderSummarySlot("Nå", item.now, item.thresholds)}
-            ${renderSummarySlot("+30 min", item.plus30, item.thresholds, trendTo30)}
-            ${renderSummarySlot("+1 time", item.plus60, item.thresholds, trendTo60)}
-          </div>
-        </article>
-      `;
-    })
-    .join("");
-}
-
-function renderHero(route) {
-  const info = severityInfo(route.current.delaySec ?? 0, route.thresholds);
-  elements.severityPill.textContent = info.label;
-  elements.severityPill.style.color = info.color;
-  elements.severityPill.style.background = `${info.color}1e`;
-  elements.severityPill.style.borderColor = `${info.color}33`;
-
-  elements.heroDelay.textContent = formatMinutes((route.current.delaySec ?? 0) / 60);
-  elements.heroSummary.textContent =
-    `Strekningen bruker nå ${formatMinutesFromSeconds(route.current.durationSec ?? 0)} mot ` +
-    `${formatMinutesFromSeconds(route.current.staticDurationSec ?? 0)} under normal flyt. ` +
-    `Estimert købelastning ligger på ${formatMeters(route.current.queueLengthMeters ?? 0)} av ruten.`;
-  elements.queueLengthValue.textContent = formatMeters(route.current.queueLengthMeters ?? 0);
-  elements.liveDurationValue.textContent = formatMinutesFromSeconds(route.current.durationSec ?? 0);
-  elements.freeFlowValue.textContent = formatMinutesFromSeconds(route.current.staticDurationSec ?? 0);
-  elements.distanceValue.textContent = formatMeters(route.current.distanceMeters ?? 0);
-  elements.updatedValue.textContent = route.updatedAt ? formatTime(route.updatedAt) : "--";
-  elements.routeSubtitle.textContent = route.subtitle;
-  elements.originLabelValue.textContent = route.originLabel;
-  elements.destinationLabelValue.textContent = route.destinationLabel;
-}
-
-function renderRoute(route) {
-  elements.routeStrip.innerHTML = "";
-  (route.current?.segments ?? []).forEach((segment) => {
-    const el = document.createElement("div");
-    el.className = `route-segment speed-${String(segment.speed ?? "NORMAL").toLowerCase().replace("traffic_jam", "jam")}`;
-    el.style.setProperty("--segment-weight", String(Math.max(0.8, (segment.distanceMeters ?? 0) / 180)));
-    el.innerHTML = `<span>${segment.label}</span>`;
-    elements.routeStrip.appendChild(el);
-  });
-
-  if (!route.current?.segments?.length) {
-    elements.routeStrip.innerHTML = `<div class="route-segment speed-normal" style="--segment-weight:1;"><span>Ingen snapshot ennå</span></div>`;
+  if (queueLengthMeters === undefined && delaySec === undefined) {
+    return null;
   }
 
-  elements.routeLegend.innerHTML = `
-    <span class="legend-chip normal">Normal</span>
-    <span class="legend-chip slow">Sakte</span>
-    <span class="legend-chip jam">Kø</span>
-  `;
+  return {
+    index,
+    time: timestamp,
+    queueLengthMeters: queueLengthMeters !== undefined ? Number(queueLengthMeters) : Math.max(0, Number(delaySec) * 1.25),
+  };
 }
 
-function renderTodayStats(route) {
-  elements.queueStartValue.textContent = route.today.queueStart ? displayTime(route.today.queueStart) : "Ingen tydelig kø";
-  elements.queueEndValue.textContent = route.today.queueEnd ? displayTime(route.today.queueEnd) : "Pågår";
-  elements.queueDurationValue.textContent = formatMinutes(route.today.queueDurationMinutes ?? 0);
-  elements.peakDelayValue.textContent = formatMinutes(route.today.peakDelayMinutes ?? 0);
+function getChart(route) {
+  const chart = route?.queueChart ?? {};
+  const fallbackRecent = route?.recentSnapshots ?? state.payload?.recentSnapshots ?? [];
+  const seriesCandidates = [chart.today, fallbackRecent, chart.average, chart.yesterday].filter((series) => Array.isArray(series) && series.length);
+  const sourceSeries = seriesCandidates[0] ?? [];
+  const slots = chart.slots?.length
+    ? chart.slots
+    : sourceSeries.map((point, index) => {
+        const label = formatTime(point?.ts ?? point?.time ?? point?.timestamp);
+        return label === "--" ? String(index + 1) : label;
+      });
+
+  return {
+    slots,
+    today: (chart.today ?? fallbackRecent).map((point, index) => normalizeSeriesPoint(point, index, slots)).filter(Boolean),
+    average: (chart.average ?? chart.forecast ?? []).map((point, index) => normalizeSeriesPoint(point, index, slots)).filter(Boolean),
+    yesterday: (chart.yesterday ?? []).map((point, index) => normalizeSeriesPoint(point, index, slots)).filter(Boolean),
+  };
 }
 
-function renderUnavailableRoute(route) {
-  elements.routeSubtitle.textContent = `${route.subtitle} (venter på første måling)`;
-  elements.updatedValue.textContent = route.updatedAt ? formatTime(route.updatedAt) : "Ikke tilgjengelig";
-  elements.originLabelValue.textContent = route.originLabel;
-  elements.destinationLabelValue.textContent = route.destinationLabel;
-  elements.severityPill.textContent = "Venter på data";
-  elements.severityPill.style.color = "#9fb3c8";
-  elements.severityPill.style.background = "rgba(159,179,200,0.12)";
-  elements.severityPill.style.borderColor = "rgba(159,179,200,0.22)";
-  elements.heroDelay.textContent = "-- min";
-  elements.heroSummary.textContent =
-    "Denne ruten er lagt til, men har ennå ikke fått første lagrede snapshot. Kjør poll-funksjonen én gang manuelt eller vent til neste planlagte polling.";
-  elements.queueLengthValue.textContent = "-- m";
-  elements.liveDurationValue.textContent = "-- min";
-  elements.freeFlowValue.textContent = "-- min";
-  elements.distanceValue.textContent = "-- km";
-  renderRoute(route);
-  elements.queueStartValue.textContent = "--";
-  elements.queueEndValue.textContent = "--";
-  elements.queueDurationValue.textContent = "--";
-  elements.peakDelayValue.textContent = "--";
-  renderQueueChart({
-    queueChart: {
-      slots: state.payload?.queueChart?.slots ?? [],
-      today: (state.payload?.queueChart?.slots ?? []).map(() => ({ queueLengthMeters: 0, delaySec: 0 })),
-      yesterday: (state.payload?.queueChart?.slots ?? []).map(() => ({ queueLengthMeters: 0, delaySec: 0 })),
-      average: (state.payload?.queueChart?.slots ?? []).map(() => ({ queueLengthMeters: 0, delaySec: 0 })),
-    },
+function pathFor(points, x, y) {
+  return points
+    .map((point, index) => `${index === 0 ? "M" : "L"} ${x(point.index).toFixed(1)} ${y(point.queueLengthMeters).toFixed(1)}`)
+    .join(" ");
+}
+
+function currentSlotIndex(slots, referenceTime) {
+  if (!slots.length) {
+    return null;
+  }
+
+  const referenceDate = referenceTime ? new Date(referenceTime) : new Date();
+  const markerDate = Number.isNaN(referenceDate.getTime()) ? new Date() : referenceDate;
+  const nowLabel = formatClock(markerDate);
+  const exact = slots.findIndex((slot) => String(slot).slice(0, 5) === nowLabel);
+  if (exact >= 0) {
+    return exact;
+  }
+
+  const nowMinutes = markerDate.getHours() * 60 + markerDate.getMinutes();
+  const slotMinutes = slots.map((slot) => {
+    const match = String(slot).match(/(\d{1,2}):(\d{2})/);
+    return match ? Number(match[1]) * 60 + Number(match[2]) : null;
   });
-  renderHeatmap({
-    weekdayProfile:
-      state.payload?.weekdayProfile ??
-      [],
+
+  let bestIndex = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  slotMinutes.forEach((minutes, index) => {
+    if (minutes === null) {
+      return;
+    }
+    const distance = Math.abs(minutes - nowMinutes);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
   });
-  fillForecast("yesterday", null);
-  fillForecast("forecastToday", null);
-  fillForecast("forecastTomorrow", null);
+
+  if (bestDistance > 45) {
+    return null;
+  }
+
+  return bestIndex;
 }
 
 function renderQueueChart(route) {
   const svg = elements.delayChart;
-  const width = 640;
-  const height = 220;
-  const padding = { top: 28, right: 12, bottom: 30, left: 54 };
+  const width = 960;
+  const height = 360;
+  const padding = { top: 28, right: 36, bottom: 44, left: 72 };
+  const chart = getChart(route);
+  const slots = chart.slots;
+  const context = getDashboardDayContext(route);
 
-  const chart = route.queueChart ?? {
-    slots: [],
-    today: [],
-    yesterday: [],
-    average: [],
-  };
+  elements.chartTitle.textContent = "Købildet for i dag";
+  elements.chartSubtitle.textContent =
+    context.dataAgeDays === 1
+      ? "Kø i går, forventet kø i dag og historisk snitt"
+      : context.isEvening
+        ? "Dagens målte kø og forventet mønster"
+        : "Kølengde i meter gjennom ettermiddagen";
+  elements.actualLegendLabel.textContent = context.actualLabel;
+  elements.expectedLegendLabel.textContent = context.expectedLabel;
+  elements.historyLegendLabel.textContent = context.historyLabel;
 
-  const slots = chart.slots ?? [];
-  const todaySeries = chart.today ?? [];
-  const yesterdaySeries = chart.yesterday ?? [];
-  const averageSeries = chart.average ?? [];
-
-  if (!slots.length) {
-    svg.innerHTML = "";
+  if (!slots.length || (!chart.today.length && !chart.average.length && !chart.yesterday.length)) {
+    svg.innerHTML = `
+      <text x="48" y="78" fill="#637381" font-size="22" font-family="IBM Plex Sans, Arial">Venter på data</text>
+    `;
     return;
   }
 
-  const hasMetric = (point) => point && point.queueLengthMeters != null;
-  const validPoints = (series) =>
-    series.flatMap((point, index) =>
-      hasMetric(point) ? [{ index, value: point.queueLengthMeters }] : [],
-    );
-  const allValues = [
-    ...todaySeries.filter(hasMetric).map((item) => item.queueLengthMeters),
-    ...yesterdaySeries.filter(hasMetric).map((item) => item.queueLengthMeters),
-    ...averageSeries.filter(hasMetric).map((item) => item.queueLengthMeters),
-  ];
-
-  const actualMaxQueue = Math.max(...allValues, 0);
-  const step = niceQueueStep(actualMaxQueue);
-  const maxQueue = Math.max(40, Math.ceil(Math.max(actualMaxQueue, 1) / step) * step);
+  const allValues = [...chart.today, ...chart.average, ...chart.yesterday].map((point) => point.queueLengthMeters);
+  const maxValue = Math.max(40, ...allValues);
+  const step = niceQueueStep(maxValue);
+  const maxQueue = Math.ceil(maxValue / step) * step;
   const innerWidth = width - padding.left - padding.right;
   const innerHeight = height - padding.top - padding.bottom;
+  const x = (index) => padding.left + (index / Math.max(slots.length - 1, 1)) * innerWidth;
+  const y = (value) => padding.top + innerHeight - (value / maxQueue) * innerHeight;
   const tickValues = [0, maxQueue / 2, maxQueue].map((value) => Math.round(value / step) * step);
   const labelIndexes = slots
     .map((slot, index) => ({ slot, index }))
-    .filter(({ slot }) => slot.endsWith(":00") || slot.endsWith(":30"))
+    .filter(({ slot }, index) => index === 0 || index === slots.length - 1 || String(slot).endsWith(":00") || String(slot).endsWith(":30"))
     .map(({ index }) => index);
+  const uniqueLabelIndexes = [...new Set(labelIndexes)].filter((index, listIndex, list) => listIndex === 0 || index - list[listIndex - 1] > 1);
+  const nowIndex = context.showMarker ? currentSlotIndex(slots, route?.updatedAt ?? state.payload?.updatedAt) : null;
+  const todayAtNow = chart.today.find((point) => point.index === nowIndex);
 
-  const x = (index) => padding.left + (index / Math.max(slots.length - 1, 1)) * innerWidth;
-  const y = (value) => padding.top + innerHeight - (value / maxQueue) * innerHeight;
-  const pathFor = (series) => {
-    const points = validPoints(series);
-    if (!points.length) {
-      return "";
-    }
-
-    return points
-      .map((point, index) => `${index === 0 ? "M" : "L"} ${x(point.index).toFixed(1)} ${y(point.value).toFixed(1)}`)
-      .join(" ");
-  };
-
-  const todayPath = pathFor(todaySeries);
-  const yesterdayPath = pathFor(yesterdaySeries);
-  const averagePath = pathFor(averageSeries);
-  const todayPoints = validPoints(todaySeries);
-  const areaPath =
-    todayPoints.length >= 2
-      ? `${todayPath} L ${x(todayPoints[todayPoints.length - 1].index).toFixed(1)} ${height - padding.bottom} ` +
-        `L ${x(todayPoints[0].index).toFixed(1)} ${height - padding.bottom} Z`
-      : "";
-
-  const gridLines = [...new Set(tickValues.filter((value) => value > 0))]
-    .map((value) => {
-      const pos = y(value);
-      return `
-        <line x1="${padding.left}" y1="${pos}" x2="${width - padding.right}" y2="${pos}" stroke="rgba(255,255,255,0.08)" />
-        <text x="${padding.left - 10}" y="${pos + 4}" text-anchor="end" fill="rgba(150,168,189,0.88)" font-size="11">${formatAxisMeters(value)}</text>
-      `;
-    })
-    .join("");
-
-  const labels = labelIndexes
-    .map((index) => `
-      <text x="${x(index)}" y="${height - 8}" text-anchor="middle" fill="rgba(150,168,189,0.9)" font-size="11">
-        ${slots[index]}
-      </text>
+  const grid = tickValues
+    .map((value) => `
+      <line x1="${padding.left}" y1="${y(value)}" x2="${width - padding.right}" y2="${y(value)}" stroke="#e8e2d8" stroke-width="1" />
+      <text x="${padding.left - 14}" y="${y(value) + 5}" text-anchor="end" fill="#637381" font-size="15" font-family="IBM Plex Sans, Arial">${formatAxisMeters(value)}</text>
     `)
     .join("");
 
-  const emptyState =
-    actualMaxQueue === 0
-      ? `<text x="${padding.left}" y="${padding.top - 8}" fill="rgba(150,168,189,0.72)" font-size="11">14:00–17:00 uten tydelig kø</text>`
+  const labels = uniqueLabelIndexes
+    .map((index) => `
+      <text x="${x(index)}" y="${height - 12}" text-anchor="middle" fill="#637381" font-size="15" font-family="IBM Plex Sans, Arial">${slots[index]}</text>
+    `)
+    .join("");
+
+  const nowMarker =
+    nowIndex !== null
+      ? `
+        <line x1="${x(nowIndex)}" y1="${padding.top}" x2="${x(nowIndex)}" y2="${height - padding.bottom}" stroke="#00afc6" stroke-width="2" />
+        <rect x="${x(nowIndex) - 28}" y="${padding.top - 26}" width="56" height="22" rx="11" fill="#00afc6" />
+        <text x="${x(nowIndex)}" y="${padding.top - 10}" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="700" font-family="IBM Plex Sans, Arial">${context.markerLabel}</text>
+        ${
+          todayAtNow
+            ? `<circle cx="${x(todayAtNow.index)}" cy="${y(todayAtNow.queueLengthMeters)}" r="6" fill="#ffffff" stroke="#002f6c" stroke-width="4" />`
+            : ""
+        }
+      `
       : "";
 
-  const legend = `
-    <g transform="translate(${padding.left}, 10)">
-      <line x1="0" y1="0" x2="18" y2="0" stroke="rgba(130,152,179,0.72)" stroke-width="2" stroke-dasharray="6 6"></line>
-      <text x="24" y="4" fill="rgba(150,168,189,0.88)" font-size="11">Historisk snitt</text>
-      <line x1="148" y1="0" x2="166" y2="0" stroke="rgba(127,191,255,0.55)" stroke-width="2"></line>
-      <text x="172" y="4" fill="rgba(150,168,189,0.88)" font-size="11">Gårsdag</text>
-      <line x1="252" y1="0" x2="270" y2="0" stroke="#ffb84d" stroke-width="3"></line>
-      <text x="276" y="4" fill="rgba(240,247,255,0.92)" font-size="11">I dag</text>
-    </g>
-  `;
-
   svg.innerHTML = `
-      <defs>
-        <linearGradient id="queueArea" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="rgba(255,184,77,0.36)" />
-          <stop offset="100%" stop-color="rgba(255,184,77,0.02)" />
-        </linearGradient>
-      </defs>
-      ${legend}
-      <line x1="${padding.left}" y1="${y(0)}" x2="${width - padding.right}" y2="${y(0)}" stroke="rgba(255,255,255,0.08)" />
-      ${gridLines}
-      ${emptyState}
-      ${areaPath ? `<path d="${areaPath}" fill="url(#queueArea)"></path>` : ""}
-      ${averagePath ? `<path d="${averagePath}" fill="none" stroke="rgba(130,152,179,0.72)" stroke-width="2" stroke-dasharray="6 6" stroke-linejoin="round" stroke-linecap="round"></path>` : ""}
-      ${yesterdayPath ? `<path d="${yesterdayPath}" fill="none" stroke="rgba(127,191,255,0.55)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></path>` : ""}
-      ${todayPath ? `<path d="${todayPath}" fill="none" stroke="#ffb84d" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"></path>` : ""}
-      ${todayPoints
-        .map(
-          (point) => `
-      <circle cx="${x(point.index)}" cy="${y(point.value)}" r="3.5" fill="#08111a" stroke="#54d5ff" stroke-width="2"></circle>
-    `,
-        )
-        .join("")}
-      ${labels}
-    `;
+    <rect x="0" y="0" width="${width}" height="${height}" fill="#fffefa" />
+    ${grid}
+    <line x1="${padding.left}" y1="${height - padding.bottom}" x2="${width - padding.right}" y2="${height - padding.bottom}" stroke="#dcd5ca" stroke-width="1.5" />
+    ${chart.yesterday.length ? `<path d="${pathFor(chart.yesterday, x, y)}" fill="none" stroke="#a8b2bd" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" opacity="0.75" />` : ""}
+    ${chart.average.length ? `<path d="${pathFor(chart.average, x, y)}" fill="none" stroke="#d99a2b" stroke-width="3.5" stroke-dasharray="10 10" stroke-linejoin="round" stroke-linecap="round" />` : ""}
+    ${chart.today.length ? `<path d="${pathFor(chart.today, x, y)}" fill="none" stroke="#002f6c" stroke-width="5" stroke-linejoin="round" stroke-linecap="round" />` : ""}
+    ${nowMarker}
+    ${labels}
+  `;
 }
 
-function heatColor(value) {
-  const alpha = 0.12 + value * 0.68;
-  const red = Math.round(84 + value * 171);
-  const green = Math.round(213 - value * 82);
-  const blue = Math.round(255 - value * 167);
-  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+function getForecastPeriod(route) {
+  const forecast = route?.forecastToday;
+  const today = route?.today;
+  const start = coalesce(forecast?.startLabel, forecast?.start_label, forecast?.start, today?.queueStart, today?.queue_start);
+  const end = coalesce(forecast?.endLabel, forecast?.end_label, forecast?.end, today?.queueEnd, today?.queue_end);
+
+  if (!start && !end) {
+    const expectedSeries = getChart(route).average;
+    const activePoints = getExpectedQueueWindow(expectedSeries);
+    if (!activePoints) {
+      return "Venter på data";
+    }
+    return `${activePoints.start}–${activePoints.end}`;
+  }
+
+  return `${formatTime(start)}–${end ? formatTime(end) : "pågår"}`;
 }
 
-function renderHeatmap(route) {
-  const days = state.payload?.weekdayLabels ?? ["Man", "Tir", "Ons", "Tor", "Fre"];
-  const slots = route.weekdayProfile ?? [];
-  const container = elements.weekdayHeatmap;
-  container.innerHTML = "";
+function getExpectedQueueWindow(points) {
+  if (!points.length) {
+    return null;
+  }
 
-  const corner = document.createElement("div");
-  corner.className = "heatmap-corner";
-  corner.textContent = "Tid";
-  container.appendChild(corner);
+  const maxQueue = Math.max(...points.map((point) => point.queueLengthMeters), 0);
+  const threshold = Math.max(40, maxQueue * 0.18);
+  const active = points.filter((point) => point.queueLengthMeters >= threshold);
+  if (!active.length) {
+    return null;
+  }
 
-  slots.forEach((row, index) => {
-    const el = document.createElement("div");
-    el.className = "heatmap-header";
-    el.textContent = index % 2 === 0 ? row.time : "";
-    container.appendChild(el);
-  });
-
-  days.forEach((day, dayIndex) => {
-    const label = document.createElement("div");
-    label.className = "heatmap-row-label";
-    label.textContent = day;
-    container.appendChild(label);
-
-    slots.forEach((row, slotIndex) => {
-      const value = row.values?.[dayIndex] ?? 0;
-      const cell = document.createElement("div");
-      cell.className = "heatmap-cell";
-      cell.style.background = heatColor(value);
-      if (value >= 0.7) {
-        cell.classList.add("is-strong");
-      } else if (value >= 0.35) {
-        cell.classList.add("is-medium");
-      }
-      cell.title = `${day} ${row.time}: ${Math.round(value * 100)} % av typisk toppnivå`;
-      if (slotIndex % 2 === 0) {
-        cell.dataset.time = row.time;
-      }
-      container.appendChild(cell);
-    });
-  });
+  return {
+    start: formatTime(active[0].time),
+    end: formatTime(active[active.length - 1].time),
+  };
 }
 
-function fillForecast(prefix, payload) {
-  const fallbackText = payload?.sampleSize ? "--" : "Bygger historikk";
-  elements[`${prefix}StartValue`].textContent = payload?.startLabel ?? fallbackText;
-  elements[`${prefix}EndValue`].textContent = payload?.endLabel ?? fallbackText;
-  elements[`${prefix}DurationValue`].textContent = payload ? formatMinutes(payload.durationMinutes ?? 0) : fallbackText;
-  elements[`${prefix}PeakValue`].textContent = payload ? formatMeters(payload.peakQueueLengthMeters ?? 0) : fallbackText;
+function getExpectedPeak(route) {
+  const forecast = route?.forecastToday;
+  const peakMeters = coalesce(forecast?.peakQueueLengthMeters, forecast?.peak_queue_length_m, forecast?.maxQueueLengthMeters, forecast?.max_queue_length_m);
+  const peakTime = coalesce(forecast?.peakLabel, forecast?.peak_label, forecast?.peakTime, forecast?.peak_time);
+  const expectedSeries = getChart(route).average;
+
+  if (peakMeters !== undefined && peakMeters !== null) {
+    const inferredPeak = expectedSeries.length
+      ? expectedSeries.reduce((best, point) => (point.queueLengthMeters > best.queueLengthMeters ? point : best), expectedSeries[0])
+      : null;
+
+    return {
+      time: peakTime ? formatTime(peakTime) : inferredPeak ? formatTime(inferredPeak.time) : "--",
+      length: formatMeters(peakMeters),
+    };
+  }
+
+  if (!expectedSeries.length) {
+    return { time: "--", length: "-- m" };
+  }
+
+  const peak = expectedSeries.reduce((best, point) => (point.queueLengthMeters > best.queueLengthMeters ? point : best), expectedSeries[0]);
+  return {
+    time: formatTime(peak.time),
+    length: formatMeters(peak.queueLengthMeters),
+  };
 }
 
-function renderForecasts(route) {
-  fillForecast("yesterday", route.yesterday);
-  fillForecast("forecastToday", route.forecastToday);
-  fillForecast("forecastTomorrow", route.forecastTomorrow);
+function renderInsights(route) {
+  const peak = getExpectedPeak(route);
+  elements.expectedPeakTimeValue.textContent = peak.time === "--" ? "Venter på data" : `ca. ${peak.time}`;
+  elements.expectedPeakLengthValue.textContent = peak.length;
+  elements.expectedPeriodValue.textContent = getForecastPeriod(route);
 }
 
 function applyView() {
@@ -573,34 +627,20 @@ function applyView() {
     return;
   }
 
-  renderTabs(state.payload);
-
-  if (state.activeTab === "summary") {
-    document.body.classList.add("summary-mode");
-    document.body.classList.remove("route-mode");
-    elements.routeSubtitle.textContent = "Oversikt over flere ruter fra Kokstad, med estimering nå og frem i tid.";
-    elements.updatedValue.textContent = state.payload.updatedAt ? formatTime(state.payload.updatedAt) : "Laster";
-    renderSummary(state.payload);
-    return;
+  const routes = normalizeRoutes(state.payload);
+  if (!routes.some((route) => route.id === state.activeTab)) {
+    state.activeTab = routes[0]?.id ?? null;
+    if (state.activeTab) {
+      setStoredActiveTab(state.activeTab);
+    }
   }
 
-  const route = state.payload.routes.find((item) => item.id === state.activeTab) ?? state.payload.routes[0];
-  if (!route) {
-    return;
-  }
-
-  document.body.classList.remove("summary-mode");
-  document.body.classList.add("route-mode");
-  if (!route.current) {
-    renderUnavailableRoute(route);
-    return;
-  }
-  renderHero(route);
-  renderRoute(route);
-  renderTodayStats(route);
+  const route = getActiveRoute();
+  renderHeader(route);
+  renderRouteTabs(state.payload);
+  renderCurrentStatus(route);
   renderQueueChart(route);
-  renderHeatmap(route);
-  renderForecasts(route);
+  renderInsights(route);
 }
 
 async function loadDashboard() {
@@ -612,11 +652,6 @@ async function loadDashboard() {
   }
 
   state.payload = data;
-  if (state.activeTab !== "summary" && !data.routes.some((route) => route.id === state.activeTab)) {
-    state.activeTab = "summary";
-    setStoredActiveTab("summary");
-  }
-
   applyView();
 }
 
@@ -627,6 +662,7 @@ function scheduleDashboardPolling() {
     loadDashboard()
       .catch((error) => {
         elements.routeSubtitle.textContent = `Kunne ikke oppdatere dashboard-data: ${error.message}`;
+        elements.statusSentence.textContent = "Venter på data.";
       })
       .finally(scheduleDashboardPolling);
   }, delay);
@@ -634,8 +670,15 @@ function scheduleDashboardPolling() {
 
 setClock();
 setInterval(setClock, 1000);
+setInterval(() => {
+  if (state.payload) {
+    applyView();
+  }
+}, ONE_MINUTE_MS);
 scheduleDashboardPolling();
 
 loadDashboard().catch((error) => {
   elements.routeSubtitle.textContent = `Kunne ikke laste dashboard-data: ${error.message}`;
+  elements.statusSentence.textContent = "Venter på data.";
+  renderQueueChart(null);
 });
