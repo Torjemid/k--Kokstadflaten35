@@ -1,4 +1,4 @@
-const DATA_URL = "https://hfhjbbzbuzebilfuydtm.supabase.co/functions/v1/clever-api";
+const DATA_URL = "https://hfhjbbzbuzebilfuydtm.supabase.co/functions/v1/get-kokstad-dashboard";
 const ACTIVE_TAB_STORAGE_KEY = "kokstadDashboardActiveTab";
 const ONE_MINUTE_MS = 60 * 1000;
 const LIVE_START_MINUTES = 14 * 60 + 30;
@@ -28,6 +28,7 @@ const elements = {
   delayChart: document.getElementById("delayChart"),
   actualLegendLabel: document.getElementById("actualLegendLabel"),
   expectedLegendLabel: document.getElementById("expectedLegendLabel"),
+  yesterdayLegendLabel: document.getElementById("yesterdayLegendLabel"),
   historyLegendLabel: document.getElementById("historyLegendLabel"),
   expectedPeakTimeValue: document.getElementById("expectedPeakTimeValue"),
   expectedPeakLengthValue: document.getElementById("expectedPeakLengthValue"),
@@ -272,9 +273,9 @@ function buildStatusSentence(snapshot, thresholds, context) {
   if (!context?.isSameDay) {
     const measuredWhen = context?.dataAgeDays === 1 ? "i går" : "sist";
     if (context?.hasLiveWindowStarted) {
-      return `Live-måling er startet. Venter på første oppdatering fra dagens trafikk. Grafen viser ${context?.actualLabel.toLowerCase() ?? "siste målte kø"} og historisk snitt til ny måling kommer. Sist målt ${measuredWhen}: ${formatMeters(queueMeters)} kø og ${durationText} reisetid.`;
+      return `Live-måling er startet. Venter på første oppdatering fra dagens trafikk. Grafen viser forventet kø videre, ${context?.actualLabel.toLowerCase() ?? "siste målte kø"} og historisk snitt til ny måling kommer. Sist målt ${measuredWhen}: ${formatMeters(queueMeters)} kø og ${durationText} reisetid.`;
     }
-    return `Neste live-måling starter 14:30. Grafen viser ${context?.actualLabel.toLowerCase() ?? "siste målte kø"} og historisk snitt. Sist målt ${measuredWhen}: ${formatMeters(queueMeters)} kø og ${durationText} reisetid.`;
+    return `Neste live-måling starter 14:30. Grafen viser forventet kø i dag, ${context?.actualLabel.toLowerCase() ?? "siste målte kø"} og historisk snitt. Sist målt ${measuredWhen}: ${formatMeters(queueMeters)} kø og ${durationText} reisetid.`;
   }
 
   if (context?.isEvening) {
@@ -386,7 +387,11 @@ function renderCurrentStatus(route) {
       ? `Sist målt ${context.dataAgeDays === 1 ? "i går" : `kl. ${formatTime(context.updatedDate)}`}`
       : info.label
     : "Venter på data";
-  elements.statusSentence.textContent = buildStatusSentence(snapshot, thresholds, context);
+  const weatherComment = route?.forecastToday?.weatherComment ?? route?.weatherInsight?.comment;
+  elements.statusSentence.textContent = [
+    buildStatusSentence(snapshot, thresholds, context),
+    weatherComment,
+  ].filter(Boolean).join(" ");
   document.body.dataset.severity = snapshot ? info.key : "UNKNOWN";
 }
 
@@ -425,6 +430,9 @@ function getChart(route) {
   return {
     slots,
     today: (chart.today ?? fallbackRecent).map((point, index) => normalizeSeriesPoint(point, index, slots)).filter(Boolean),
+    forecastToday: (chart.forecastToday ?? chart.forecast_today ?? chart.forecast ?? chart.average ?? [])
+      .map((point, index) => normalizeSeriesPoint(point, index, slots))
+      .filter(Boolean),
     average: (chart.average ?? chart.forecast ?? []).map((point, index) => normalizeSeriesPoint(point, index, slots)).filter(Boolean),
     yesterday: (chart.yesterday ?? []).map((point, index) => normalizeSeriesPoint(point, index, slots)).filter(Boolean),
   };
@@ -527,28 +535,35 @@ function renderQueueChart(route) {
   const slots = chart.slots;
   const context = getDashboardDayContext(route);
   const showToday = context.isSameDay && context.hasLiveWindowStarted;
-  const visibleToday = !context.hasLiveWindowStarted && context.isSameDay && chart.yesterday.length ? chart.yesterday : chart.today;
+  const nowIndex = context.showMarker ? currentSlotIndex(slots, route?.updatedAt ?? state.payload?.updatedAt) : null;
+  const actualToday = showToday
+    ? chart.today.filter((point) => nowIndex === null || point.index <= nowIndex)
+    : [];
+  const forecastSource = chart.forecastToday.length ? chart.forecastToday : chart.average;
+  const visibleForecast = forecastSource.filter((point) => !showToday || nowIndex === null || point.index >= nowIndex);
   const visibleAverage = chart.average;
-  const visibleYesterday = showToday ? chart.yesterday : [];
+  const visibleYesterday = chart.yesterday;
+  const showActualLegend = actualToday.length > 0;
 
   elements.chartTitle.textContent = "Købildet for i dag";
   elements.chartSubtitle.textContent =
     showToday
-      ? "I dag, i går og historisk snitt"
-      : "Kø i går og historisk snitt";
-  elements.actualLegendLabel.textContent = showToday ? "I dag" : "Kø i går";
-  elements.expectedLegendLabel.textContent = "Historisk snitt";
-  elements.historyLegendLabel.textContent = showToday ? "I går" : "";
-  elements.historyLegendLabel.parentElement.style.display = showToday ? "inline-flex" : "none";
+      ? "Faktisk nå, forventet videre, i går og historisk snitt"
+      : "Forventet i dag, kø i går og historisk snitt";
+  elements.actualLegendLabel.textContent = "Faktisk i dag";
+  elements.expectedLegendLabel.textContent = "Forventet i dag";
+  elements.yesterdayLegendLabel.textContent = "Kø i går";
+  elements.historyLegendLabel.textContent = "Historisk snitt";
+  elements.actualLegendLabel.parentElement.style.display = showActualLegend ? "inline-flex" : "none";
 
-  if (!slots.length || (!visibleToday.length && !visibleAverage.length && !visibleYesterday.length)) {
+  if (!slots.length || (!actualToday.length && !visibleForecast.length && !visibleAverage.length && !visibleYesterday.length)) {
     svg.innerHTML = `
       <text x="48" y="78" fill="#637381" font-size="22" font-family="IBM Plex Sans, Arial">Venter på data</text>
     `;
     return;
   }
 
-  const allValues = [...visibleToday, ...visibleAverage, ...visibleYesterday].map((point) => point.queueLengthMeters);
+  const allValues = [...actualToday, ...visibleForecast, ...visibleAverage, ...visibleYesterday].map((point) => point.queueLengthMeters);
   const maxValue = Math.max(40, ...allValues);
   const step = niceQueueStep(maxValue);
   const maxQueue = Math.ceil(maxValue / step) * step;
@@ -562,8 +577,7 @@ function renderQueueChart(route) {
     .filter(({ slot }, index) => index === 0 || index === slots.length - 1 || String(slot).endsWith(":00") || String(slot).endsWith(":30"))
     .map(({ index }) => index);
   const uniqueLabelIndexes = [...new Set(labelIndexes)].filter((index, listIndex, list) => listIndex === 0 || index - list[listIndex - 1] > 1);
-  const nowIndex = context.showMarker ? currentSlotIndex(slots, route?.updatedAt ?? state.payload?.updatedAt) : null;
-  const todayAtNow = visibleToday.find((point) => point.index === nowIndex);
+  const todayAtNow = actualToday.find((point) => point.index === nowIndex);
 
   const grid = tickValues
     .map((value) => `
@@ -591,7 +605,8 @@ function renderQueueChart(route) {
         }
       `
       : "";
-  const todayPath = smoothPathFor(visibleToday, x, y);
+  const actualPath = smoothPathFor(actualToday, x, y);
+  const forecastPath = smoothPathFor(visibleForecast, x, y);
   const averagePath = smoothPathFor(visibleAverage, x, y);
   const yesterdayPath = smoothPathFor(visibleYesterday, x, y);
   const baseline = height - padding.bottom;
@@ -601,6 +616,10 @@ function renderQueueChart(route) {
       <linearGradient id="todayArea" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0%" stop-color="#67d7ff" stop-opacity="0.26" />
         <stop offset="100%" stop-color="#67d7ff" stop-opacity="0" />
+      </linearGradient>
+      <linearGradient id="forecastArea" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#94e7ff" stop-opacity="0.16" />
+        <stop offset="100%" stop-color="#94e7ff" stop-opacity="0" />
       </linearGradient>
       <linearGradient id="averageArea" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0%" stop-color="#a9b8c8" stop-opacity="0.12" />
@@ -614,17 +633,23 @@ function renderQueueChart(route) {
     <rect x="0" y="0" width="${width}" height="${height}" rx="18" fill="#1f1f1f" />
     ${grid}
     <line x1="${padding.left}" y1="${height - padding.bottom}" x2="${width - padding.right}" y2="${height - padding.bottom}" stroke="rgba(255,255,255,0.12)" stroke-width="1.5" />
-    ${visibleYesterday.length ? `<path d="${areaPathFor(visibleYesterday, x, y, baseline)}" fill="url(#historyArea)" />` : ""}
     ${visibleAverage.length ? `<path d="${areaPathFor(visibleAverage, x, y, baseline)}" fill="url(#averageArea)" />` : ""}
-    ${visibleToday.length ? `<path d="${areaPathFor(visibleToday, x, y, baseline)}" fill="url(#todayArea)" />` : ""}
+    ${visibleYesterday.length ? `<path d="${areaPathFor(visibleYesterday, x, y, baseline)}" fill="url(#historyArea)" />` : ""}
+    ${visibleForecast.length ? `<path d="${areaPathFor(visibleForecast, x, y, baseline)}" fill="url(#forecastArea)" />` : ""}
+    ${actualToday.length ? `<path d="${areaPathFor(actualToday, x, y, baseline)}" fill="url(#todayArea)" />` : ""}
+    ${averagePath ? `<path d="${averagePath}" fill="none" stroke="#a9b8c8" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.46" />` : ""}
     ${yesterdayPath ? `<path d="${yesterdayPath}" fill="none" stroke="#85a8ff" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" opacity="0.5" />` : ""}
-    ${averagePath ? `<path d="${averagePath}" fill="none" stroke="#a9b8c8" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.62" />` : ""}
-    ${todayPath ? `<path d="${todayPath}" fill="none" stroke="#67d7ff" stroke-width="4.8" stroke-linejoin="round" stroke-linecap="round" />` : ""}
+    ${forecastPath ? `<path d="${forecastPath}" fill="none" stroke="#94e7ff" stroke-width="4" stroke-dasharray="10 10" stroke-linejoin="round" stroke-linecap="round" opacity="0.92" />` : ""}
+    ${actualPath ? `<path d="${actualPath}" fill="none" stroke="#67d7ff" stroke-width="5" stroke-linejoin="round" stroke-linecap="round" />` : ""}
     ${visibleAverage
       .filter((_, index) => index % 5 === 0)
       .map((point) => `<circle cx="${x(point.index)}" cy="${y(point.queueLengthMeters)}" r="3.7" fill="#a9b8c8" stroke="#1f1f1f" stroke-width="2" opacity="0.76" />`)
       .join("")}
-    ${visibleToday
+    ${visibleForecast
+      .filter((_, index) => index % 5 === 0)
+      .map((point) => `<circle cx="${x(point.index)}" cy="${y(point.queueLengthMeters)}" r="4" fill="#94e7ff" stroke="#1f1f1f" stroke-width="2" opacity="0.88" />`)
+      .join("")}
+    ${actualToday
       .filter((_, index) => index % 5 === 0)
       .map((point) => `<circle cx="${x(point.index)}" cy="${y(point.queueLengthMeters)}" r="4.6" fill="#67d7ff" stroke="#1f1f1f" stroke-width="2" />`)
       .join("")}

@@ -250,16 +250,21 @@ h1 {
   border-top: 3px solid currentColor;
 }
 
-.legend-today {
+.legend-actual {
   color: var(--brand);
 }
 
 .legend-expected {
-  color: #a9b8c8;
+  color: #94e7ff;
+  border-top-style: dashed;
+}
+
+.legend-yesterday {
+  color: var(--accent);
 }
 
 .legend-history {
-  color: var(--accent);
+  color: #a9b8c8;
 }
 
 .chart {
