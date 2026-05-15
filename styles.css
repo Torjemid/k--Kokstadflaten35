@@ -188,6 +188,7 @@ h1 {
 
 .queue-chart-panel,
 .status-card,
+.weather-card,
 .insight-card,
 .status-sentence {
   border: 1px solid var(--line);
@@ -260,11 +261,11 @@ h1 {
 }
 
 .legend-yesterday {
-  color: var(--accent);
+  color: #7fb5ff;
 }
 
 .legend-history {
-  color: #a9b8c8;
+  color: #c5d2df;
 }
 
 .chart {
@@ -279,11 +280,12 @@ h1 {
   grid-row: 1 / -1;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto auto;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) auto auto;
   gap: clamp(10px, 0.9vw, 16px);
 }
 
-.status-card {
+.status-card,
+.weather-card {
   min-height: 0;
   padding: clamp(14px, 1.1vw, 20px);
   display: flex;
@@ -295,6 +297,18 @@ h1 {
 
 .status-card-primary {
   border-color: rgba(103, 215, 255, 0.3);
+}
+
+.weather-card {
+  gap: 6px;
+  padding-block: clamp(12px, 0.9vw, 16px);
+  border-color: rgba(103, 215, 255, 0.18);
+}
+
+.weather-value {
+  color: var(--text);
+  font-size: clamp(1.32rem, 1.85vw, 2.15rem);
+  line-height: 1.05;
 }
 
 .status-label,

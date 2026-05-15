@@ -30,6 +30,8 @@ const elements = {
   expectedLegendLabel: document.getElementById("expectedLegendLabel"),
   yesterdayLegendLabel: document.getElementById("yesterdayLegendLabel"),
   historyLegendLabel: document.getElementById("historyLegendLabel"),
+  weatherValue: document.getElementById("weatherValue"),
+  weatherNote: document.getElementById("weatherNote"),
   expectedPeakTimeValue: document.getElementById("expectedPeakTimeValue"),
   expectedPeakLengthValue: document.getElementById("expectedPeakLengthValue"),
   expectedPeriodValue: document.getElementById("expectedPeriodValue"),
@@ -387,12 +389,54 @@ function renderCurrentStatus(route) {
       ? `Sist målt ${context.dataAgeDays === 1 ? "i går" : `kl. ${formatTime(context.updatedDate)}`}`
       : info.label
     : "Venter på data";
+  renderWeatherCard(route);
+
+  const calendarComment = route?.forecastToday?.calendarComment ?? route?.calendarInsight?.comment;
   const weatherComment = route?.forecastToday?.weatherComment ?? route?.weatherInsight?.comment;
   elements.statusSentence.textContent = [
     buildStatusSentence(snapshot, thresholds, context),
+    calendarComment,
     weatherComment,
   ].filter(Boolean).join(" ");
   document.body.dataset.severity = snapshot ? info.key : "UNKNOWN";
+}
+
+function renderWeatherCard(route) {
+  const weather = route?.weatherInsight ?? state.payload?.weatherInsight;
+  const calendar = route?.calendarInsight ?? state.payload?.calendarInsight;
+
+  if (!elements.weatherValue || !elements.weatherNote) {
+    return;
+  }
+
+  if (!weather) {
+    elements.weatherValue.textContent = "--";
+    elements.weatherNote.textContent = "Venter på værdata";
+    return;
+  }
+
+  const temp = Number(weather.averageTemperatureC ?? weather.minTemperatureC);
+  const precipitation = Number(weather.maxPrecipitationMm ?? 0);
+  const wind = Number(weather.maxWindSpeedMps ?? 0);
+  const weatherParts = [];
+
+  if (Number.isFinite(temp)) {
+    weatherParts.push(`${Math.round(temp)}°C`);
+  }
+  weatherParts.push(`${precipitation.toFixed(1)} mm`);
+
+  elements.weatherValue.textContent = weatherParts.join(" · ");
+
+  const adjustments = [];
+  if (calendar?.adjustmentPercent) {
+    adjustments.push(`kalender ${calendar.adjustmentPercent > 0 ? "+" : ""}${calendar.adjustmentPercent}%`);
+  }
+  if (weather.adjustmentPercent) {
+    adjustments.push(`vær ${weather.adjustmentPercent > 0 ? "+" : ""}${weather.adjustmentPercent}%`);
+  }
+
+  const windText = Number.isFinite(wind) && wind >= 8 ? `Vind ${Math.round(wind)} m/s. ` : "";
+  elements.weatherNote.textContent = `${windText}${adjustments.length ? `Justering: ${adjustments.join(", ")}.` : "Ingen tydelig værjustering."}`;
 }
 
 function normalizeSeriesPoint(point, index, slots) {
@@ -622,12 +666,12 @@ function renderQueueChart(route) {
         <stop offset="100%" stop-color="#94e7ff" stop-opacity="0" />
       </linearGradient>
       <linearGradient id="averageArea" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="#a9b8c8" stop-opacity="0.12" />
-        <stop offset="100%" stop-color="#a9b8c8" stop-opacity="0" />
+        <stop offset="0%" stop-color="#c5d2df" stop-opacity="0.12" />
+        <stop offset="100%" stop-color="#c5d2df" stop-opacity="0" />
       </linearGradient>
       <linearGradient id="historyArea" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="#85a8ff" stop-opacity="0.12" />
-        <stop offset="100%" stop-color="#85a8ff" stop-opacity="0" />
+        <stop offset="0%" stop-color="#7fb5ff" stop-opacity="0.12" />
+        <stop offset="100%" stop-color="#7fb5ff" stop-opacity="0" />
       </linearGradient>
     </defs>
     <rect x="0" y="0" width="${width}" height="${height}" rx="18" fill="#1f1f1f" />
@@ -637,13 +681,13 @@ function renderQueueChart(route) {
     ${visibleYesterday.length ? `<path d="${areaPathFor(visibleYesterday, x, y, baseline)}" fill="url(#historyArea)" />` : ""}
     ${visibleForecast.length ? `<path d="${areaPathFor(visibleForecast, x, y, baseline)}" fill="url(#forecastArea)" />` : ""}
     ${actualToday.length ? `<path d="${areaPathFor(actualToday, x, y, baseline)}" fill="url(#todayArea)" />` : ""}
-    ${averagePath ? `<path d="${averagePath}" fill="none" stroke="#a9b8c8" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.46" />` : ""}
-    ${yesterdayPath ? `<path d="${yesterdayPath}" fill="none" stroke="#85a8ff" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" opacity="0.5" />` : ""}
-    ${forecastPath ? `<path d="${forecastPath}" fill="none" stroke="#94e7ff" stroke-width="4" stroke-dasharray="10 10" stroke-linejoin="round" stroke-linecap="round" opacity="0.92" />` : ""}
+    ${averagePath ? `<path d="${averagePath}" fill="none" stroke="#c5d2df" stroke-width="3.2" stroke-dasharray="2 11" stroke-linejoin="round" stroke-linecap="round" opacity="0.72" />` : ""}
+    ${yesterdayPath ? `<path d="${yesterdayPath}" fill="none" stroke="#7fb5ff" stroke-width="2.7" stroke-linejoin="round" stroke-linecap="round" opacity="0.58" />` : ""}
+    ${forecastPath ? `<path d="${forecastPath}" fill="none" stroke="#94e7ff" stroke-width="4.2" stroke-dasharray="12 10" stroke-linejoin="round" stroke-linecap="round" opacity="0.96" />` : ""}
     ${actualPath ? `<path d="${actualPath}" fill="none" stroke="#67d7ff" stroke-width="5" stroke-linejoin="round" stroke-linecap="round" />` : ""}
     ${visibleAverage
       .filter((_, index) => index % 5 === 0)
-      .map((point) => `<circle cx="${x(point.index)}" cy="${y(point.queueLengthMeters)}" r="3.7" fill="#a9b8c8" stroke="#1f1f1f" stroke-width="2" opacity="0.76" />`)
+      .map((point) => `<circle cx="${x(point.index)}" cy="${y(point.queueLengthMeters)}" r="3.5" fill="#c5d2df" stroke="#1f1f1f" stroke-width="2" opacity="0.82" />`)
       .join("")}
     ${visibleForecast
       .filter((_, index) => index % 5 === 0)
