@@ -1,4 +1,4 @@
-const DATA_URL = "https://hfhjbbzbuzebilfuydtm.supabase.co/functions/v1/get-kokstad-dashboard";
+const DATA_URL = "https://hfhjbbzbuzebilfuydtm.supabase.co/functions/v1/clever-api";
 const ACTIVE_TAB_STORAGE_KEY = "kokstadDashboardActiveTab";
 const ONE_MINUTE_MS = 60 * 1000;
 const LIVE_START_MINUTES = 14 * 60 + 30;
@@ -752,10 +752,10 @@ function applyView() {
 
 async function loadDashboard() {
   const response = await fetch(DATA_URL, { cache: "no-store" });
-  const data = await response.json();
+  const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(data.detail ?? data.error ?? "Ukjent feil");
+    throw new Error(data.detail ?? data.error ?? data.message ?? data.msg ?? `HTTP ${response.status}`);
   }
 
   state.payload = data;
